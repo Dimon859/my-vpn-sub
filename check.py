@@ -28,7 +28,7 @@ SOURCES = [
 SUPPORTED_PROTOCOLS = ("vless://", "hysteria2://", "hy2://", "ss://", "trojan://")
 
 def country_code_to_emoji(country_code):
-    if not country_code or len(country_code) != 2:
+    if not country_code or len(country_code) != 2 or country_code == "XX":
         return "🌐"
     return chr(ord(country_code[0].upper()) + 127397) + chr(ord(country_code[1].upper()) + 127397)
 
@@ -92,6 +92,29 @@ def format_node_name(line, country_code, country_name, index):
     new_name = f"{flag} {country_name} #{index}"
     return f"{base_key}#{quote(new_name)}"
 
+def filter_by_country_limit(nodes, limit_per_country=3, max_total=30):
+    """Ограничивает количество серверов на одну страну для разнообразия"""
+    selected = []
+    country_counts = {}
+    seen_ips = set()
+
+    for line, host, latency in nodes:
+        if host in seen_ips:
+            continue
+            
+        cc, country_name = get_ip_location(host)
+        current_count = country_counts.get(cc, 0)
+        
+        if current_count < limit_per_country:
+            country_counts[cc] = current_count + 1
+            seen_ips.add(host)
+            selected.append((line, host, latency, cc, country_name))
+            
+        if len(selected) >= max_total:
+            break
+            
+    return selected
+
 def main():
     raw_keys = set()
     
@@ -110,8 +133,8 @@ def main():
 
     print(f"Собрано уникальных ключей: {len(raw_keys)}")
 
-    raw_keys_list = list(raw_keys)[:3000]
-    print(f"Отправляем на проверку первые {len(raw_keys_list)} серверов...")
+    # Берём 4000 серверов на проверку
+    raw_keys_list = list(raw_keys)[:4000]
 
     candidates = []
     for key in raw_keys_list:
@@ -120,45 +143,52 @@ def main():
             candidates.append((key, host, port))
 
     valid_nodes = []
-    with ThreadPoolExecutor(max_workers=50) as executor:
+    with ThreadPoolExecutor(max_workers=60) as executor:
         results = executor.map(check_and_ping_node, candidates)
         for line, host, latency in results:
             if line and host:
                 valid_nodes.append((line, host, latency))
 
+    # Сортировка по задержке
     valid_nodes.sort(key=lambda x: x[2])
 
-    unique_nodes = []
-    seen_ips = set()
-    for line, host, latency in valid_nodes:
-        if host not in seen_ips:
-            seen_ips.add(host)
-            unique_nodes.append((line, host, latency))
-
-    top_nodes = unique_nodes[:25]
-
-    final_keys = []
-    country_counters = {}
+    # --- 1. Формируем WHITE LIST (Только конфиги с RU/Reality/White-SNI) ---
+    white_candidates = [
+        node for node in valid_nodes 
+        if any(tag in node[0].lower() for tag in ['reality', 'sni', 'white', 'ru', 'goida', 'byewhitelist'])
+    ]
+    white_top = filter_by_country_limit(white_candidates, limit_per_country=3, max_total=25)
     
-    for line, host, latency in top_nodes:
-        cc, country_name = get_ip_location(host)
-        country_counters[cc] = country_counters.get(cc, 0) + 1
-        formatted_key = format_node_name(line, cc, country_name, country_counters[cc])
-        final_keys.append(formatted_key)
+    final_white_keys = []
+    for idx, (line, host, latency, cc, country_name) in enumerate(white_top, 1):
+        final_white_keys.append(format_node_name(line, cc, country_name, idx))
 
-    clean_content = "\n".join(final_keys)
+    # --- 2. Формируем CLEAN SUB (Общий разрозненный топ) ---
+    clean_top = filter_by_country_limit(valid_nodes, limit_per_country=3, max_total=30)
     
+    final_clean_keys = []
+    for idx, (line, host, latency, cc, country_name) in enumerate(clean_top, 1):
+        final_clean_keys.append(format_node_name(line, cc, country_name, idx))
+
+    # Запись результатов
+    clean_content = "\n".join(final_clean_keys)
+    white_content = "\n".join(final_white_keys)
+
     with open("clean_sub.txt", "w", encoding="utf-8") as f:
         f.write(clean_content)
 
     with open("white_list.txt", "w", encoding="utf-8") as f:
-        f.write(clean_content)
+        f.write(white_content)
 
-    base64_content = base64.b64encode(clean_content.encode('utf-8')).decode('utf-8')
+    base64_clean = base64.b64encode(clean_content.encode('utf-8')).decode('utf-8')
     with open("clean_sub_base64.txt", "w", encoding="utf-8") as f:
-        f.write(base64_content)
+        f.write(base64_clean)
 
-    print(f"Успешно сохранено {len(final_keys)} самых быстрых серверов с флагами!")
+    base64_white = base64.b64encode(white_content.encode('utf-8')).decode('utf-8')
+    with open("white_list_base64.txt", "w", encoding="utf-8") as f:
+        f.write(base64_white)
+
+    print("Оба списка успешно обновлены с фильтрацией по странам!")
 
 if __name__ == "__main__":
     main()

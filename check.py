@@ -28,13 +28,11 @@ SOURCES = [
 SUPPORTED_PROTOCOLS = ("vless://", "hysteria2://", "hy2://", "ss://", "trojan://")
 
 def country_code_to_emoji(country_code):
-    """Преобразует ISO код страны (DE, NL, US) в эмодзи флаг"""
     if not country_code or len(country_code) != 2:
         return "🌐"
     return chr(ord(country_code[0].upper()) + 127397) + chr(ord(country_code[1].upper()) + 127397)
 
 def get_ip_location(host):
-    """Получает код страны по IP через бесплатный API"""
     try:
         url = f"http://ip-api.com/json/{host}?fields=status,countryCode,country"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -47,7 +45,6 @@ def get_ip_location(host):
     return "XX", "Unknown"
 
 def decode_base64_if_needed(content):
-    """Проверяет, не зашифрован ли текст в Base64, и декодирует его"""
     try:
         decoded = base64.b64decode(content.strip()).decode('utf-8', errors='ignore')
         if any(decoded.startswith(p) for p in SUPPORTED_PROTOCOLS):
@@ -57,7 +54,6 @@ def decode_base64_if_needed(content):
     return content
 
 def parse_node(line):
-    """Извлекает IP/хост и порт из ключа"""
     try:
         raw = line.split("://", 1)[1]
         raw = raw.split("#")[0].split("?")[0]
@@ -75,7 +71,6 @@ def parse_node(line):
         return None, None
 
 def check_and_ping_node(item):
-    """Замеряет пинг сервера (в мс)"""
     line, host, port = item
     try:
         start_time = time.time()
@@ -92,7 +87,6 @@ def check_and_ping_node(item):
     return None, None, None
 
 def format_node_name(line, country_code, country_name, index):
-    """Приводит название сервера к красивому виду с флагом и пингом"""
     flag = country_code_to_emoji(country_code)
     base_key = line.split("#")[0]
     new_name = f"{flag} {country_name} #{index}"
@@ -101,7 +95,6 @@ def format_node_name(line, country_code, country_name, index):
 def main():
     raw_keys = set()
     
-    # 1. Скачивание и декодирование
     for url in SOURCES:
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -117,9 +110,8 @@ def main():
 
     print(f"Собрано уникальных ключей: {len(raw_keys)}")
 
-    # Ограничиваем выборку первыми 3000 ключами для молниеносной проверки
     raw_keys_list = list(raw_keys)[:3000]
-    print(𝚏"Отправляем на проверку первые {len(raw_keys_list)} серверов...")
+    print(f"Отправляем на проверку первые {len(raw_keys_list)} серверов...")
 
     candidates = []
     for key in raw_keys_list:
@@ -127,7 +119,6 @@ def main():
         if host and port:
             candidates.append((key, host, port))
 
-    # 2. Проверка связности и замер пинга (увеличили потоки до 50 для скорости)
     valid_nodes = []
     with ThreadPoolExecutor(max_workers=50) as executor:
         results = executor.map(check_and_ping_node, candidates)
@@ -135,10 +126,8 @@ def main():
             if line and host:
                 valid_nodes.append((line, host, latency))
 
-    # 3. Сортировка по минимальному пингу
     valid_nodes.sort(key=lambda x: x[2])
 
-    # 4. Дедупликация по IP
     unique_nodes = []
     seen_ips = set()
     for line, host, latency in valid_nodes:
@@ -146,10 +135,8 @@ def main():
             seen_ips.add(host)
             unique_nodes.append((line, host, latency))
 
-    # 5. Ограничение до 25 самых быстрых серверов
     top_nodes = unique_nodes[:25]
 
-    # 6. Геолокация и красивое переименование
     final_keys = []
     country_counters = {}
     
@@ -159,7 +146,6 @@ def main():
         formatted_key = format_node_name(line, cc, country_name, country_counters[cc])
         final_keys.append(formatted_key)
 
-    # 7. Запись файлов (включая Base64 для удобства)
     clean_content = "\n".join(final_keys)
     
     with open("clean_sub.txt", "w", encoding="utf-8") as f:

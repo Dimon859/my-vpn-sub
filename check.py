@@ -1,31 +1,24 @@
 import urllib.request
 import socket
+import ssl
 import json
 import time
-from urllib.parse import urlparse, unquote, quote
+from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor
 import base64
 
 SOURCES = [
     "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/WHITE-SNI-RU-all.txt",
-    "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/WHITE-CIDR-RU-all.txt",
     "https://raw.githubusercontent.com/GoldCaviar/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt",
-    "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS_mobile.txt",
-    "https://gitlab.com/igareck/vpn-configs-for-russia/-/raw/main/BLACK_VLESS_RUS.txt",
-    "https://gitlab.com/igareck/vpn-configs-for-russia/-/raw/main/BLACK_SS%2BAll_RUS.txt",
-    "https://cdn.jsdelivr.net/gh/igareck/vpn-configs-for-russia@main/Vless-Reality-White-Lists-Rus-Mobile.txt",
     "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/githubmirror/clean/vless.txt",
     "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/githubmirror/ru-sni/vless_ru.txt",
     "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/sub/vless",
     "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/sub/hysteria2",
-    "https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/V2Ray-Config-By-EbraSha-All-Type.txt",
-    "https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/vless_configs.txt",
     "https://raw.githubusercontent.com/AvenCores/goida-vpn-configs/main/githubmirror/26.txt",
-    "https://raw.githubusercontent.com/ByeWhiteLists/ByeWhiteLists2/main/ByeWhiteLists2.txt",
-    "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/WHITE-CIDR-RU-checked.txt"
+    "https://raw.githubusercontent.com/ByeWhiteLists/ByeWhiteLists2/main/ByeWhiteLists2.txt"
 ]
 
-SUPPORTED_PROTOCOLS = ("vless://", "hysteria2://", "hy2://", "ss://", "trojan://")
+SUPPORTED_PROTOCOLS = ("vless://", "hysteria2://", "hy2://", "trojan://")
 
 def country_code_to_emoji(country_code):
     if not country_code or len(country_code) != 2 or country_code == "XX":
@@ -70,18 +63,41 @@ def parse_node(line):
     except Exception:
         return None, None
 
+def is_quality_config(line):
+    """Пропускает устойчивые протоколы на ЛЮБЫХ портах, отсеивая незашифрованный WebSocket/TCP"""
+    line_lower = line.lower()
+    
+    if line_lower.startswith(("hysteria2://", "hy2://", "trojan://")):
+        return True
+        
+    if line_lower.startswith("vless://"):
+        if "security=reality" in line_lower or "security=tls" in line_lower:
+            return True
+            
+    return False
+
 def check_and_ping_node(item):
     line, host, port = item
     try:
         start_time = time.time()
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1.5)
-        res = sock.connect_ex((host, port))
-        latency = (time.time() - start_time) * 1000
-        sock.close()
         
-        if res == 0:
-            return line, host, round(latency, 1)
+        # Проверка TLS-хэндшейка для шифрованных серверов
+        if "security=tls" in line.lower() or "security=reality" in line.lower():
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            with socket.create_connection((host, port), timeout=2) as sock:
+                with context.wrap_socket(sock, server_hostname=host) as ssock:
+                    latency = (time.time() - start_time) * 1000
+                    return line, host, round(latency, 1)
+        else:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1.5)
+            res = sock.connect_ex((host, port))
+            latency = (time.time() - start_time) * 1000
+            sock.close()
+            if res == 0:
+                return line, host, round(latency, 1)
     except Exception:
         pass
     return None, None, None
@@ -92,8 +108,7 @@ def format_node_name(line, country_code, country_name, index):
     new_name = f"{flag} {country_name} #{index}"
     return f"{base_key}#{quote(new_name)}"
 
-def filter_by_country_limit(nodes, limit_per_country=3, max_total=30):
-    """Ограничивает количество серверов на одну страну для разнообразия"""
+def filter_by_country_limit(nodes, limit_per_country=2, max_total=25):
     selected = []
     country_counts = {}
     seen_ips = set()
@@ -126,15 +141,14 @@ def main():
                 content = decode_base64_if_needed(content)
                 for line in content.splitlines():
                     line = line.strip()
-                    if line.startswith(SUPPORTED_PROTOCOLS):
+                    if line.startswith(SUPPORTED_PROTOCOLS) and is_quality_config(line):
                         raw_keys.add(line)
         except Exception:
             continue
 
-    print(f"Собрано уникальных ключей: {len(raw_keys)}")
+    print(f"Отфильтровано качественных ключей: {len(raw_keys)}")
 
-    # Берём 4000 серверов на проверку
-    raw_keys_list = list(raw_keys)[:4000]
+    raw_keys_list = list(raw_keys)[:3000]
 
     candidates = []
     for key in raw_keys_list:
@@ -143,34 +157,35 @@ def main():
             candidates.append((key, host, port))
 
     valid_nodes = []
-    with ThreadPoolExecutor(max_workers=60) as executor:
+    with ThreadPoolExecutor(max_workers=50) as executor:
         results = executor.map(check_and_ping_node, candidates)
         for line, host, latency in results:
             if line and host:
                 valid_nodes.append((line, host, latency))
 
-    # Сортировка по задержке
     valid_nodes.sort(key=lambda x: x[2])
 
-    # --- 1. Формируем WHITE LIST (Только конфиги с RU/Reality/White-SNI) ---
+    # 1. WHITE LIST (Только VLESS-Reality и конфиги с белыми списками/RU-SNI)
     white_candidates = [
         node for node in valid_nodes 
         if any(tag in node[0].lower() for tag in ['reality', 'sni', 'white', 'ru', 'goida', 'byewhitelist'])
     ]
-    white_top = filter_by_country_limit(white_candidates, limit_per_country=3, max_total=25)
+    white_top = filter_by_country_limit(white_candidates, limit_per_country=2, max_total=20)
     
-    final_white_keys = []
-    for idx, (line, host, latency, cc, country_name) in enumerate(white_top, 1):
-        final_white_keys.append(format_node_name(line, cc, country_name, idx))
+    final_white_keys = [
+        format_node_name(line, cc, country_name, idx)
+        for idx, (line, host, latency, cc, country_name) in enumerate(white_top, 1)
+    ]
 
-    # --- 2. Формируем CLEAN SUB (Общий разрозненный топ) ---
-    clean_top = filter_by_country_limit(valid_nodes, limit_per_country=3, max_total=30)
+    # 2. CLEAN SUB (Общий проверенный топ)
+    clean_top = filter_by_country_limit(valid_nodes, limit_per_country=2, max_total=25)
     
-    final_clean_keys = []
-    for idx, (line, host, latency, cc, country_name) in enumerate(clean_top, 1):
-        final_clean_keys.append(format_node_name(line, cc, country_name, idx))
+    final_clean_keys = [
+        format_node_name(line, cc, country_name, idx)
+        for idx, (line, host, latency, cc, country_name) in enumerate(clean_top, 1)
+    ]
 
-    # Запись результатов
+    # Запись текстовых и Base64 файлов
     clean_content = "\n".join(final_clean_keys)
     white_content = "\n".join(final_white_keys)
 
@@ -180,15 +195,13 @@ def main():
     with open("white_list.txt", "w", encoding="utf-8") as f:
         f.write(white_content)
 
-    base64_clean = base64.b64encode(clean_content.encode('utf-8')).decode('utf-8')
     with open("clean_sub_base64.txt", "w", encoding="utf-8") as f:
-        f.write(base64_clean)
+        f.write(base64.b64encode(clean_content.encode('utf-8')).decode('utf-8'))
 
-    base64_white = base64.b64encode(white_content.encode('utf-8')).decode('utf-8')
     with open("white_list_base64.txt", "w", encoding="utf-8") as f:
-        f.write(base64_white)
+        f.write(base64.b64encode(white_content.encode('utf-8')).decode('utf-8'))
 
-    print("Оба списка успешно обновлены с фильтрацией по странам!")
+    print("Все подписки успешно обновлены!")
 
 if __name__ == "__main__":
     main()

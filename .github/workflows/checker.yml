@@ -2,8 +2,8 @@ name: VPN Sub Checker
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # Запуск каждые 6 часов
-  workflow_dispatch: # Возможность запустить вручную кнопкой
+    - cron: '0 */6 * * *' # Автозапуск каждые 6 часов
+  workflow_dispatch: # Возможность ручного запуска кнопкой Run workflow
 
 jobs:
   check-and-filter:
@@ -23,7 +23,8 @@ jobs:
       - name: Commit and push clean list
         run: |
           git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions@users.noreply.github.com"
-          git add clean_sub.txt
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add clean_sub.txt white_list.txt clean_sub_base64.txt
           git commit -m "Auto-update clean VPN list" || exit 0
           git push
+

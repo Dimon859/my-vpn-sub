@@ -2,19 +2,19 @@ import urllib.request
 import socket
 import json
 import time
-import re
 from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor
 import base64
 
-# Источники, созданные специально для обхода блокировок ТСПУ в РФ
+# Сфокусированные свежие источники
 SOURCES = [
-    "https://raw.githubusercontent.com/GoldCaviar/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt",
+    "https://raw.githubusercontent.com/yebekhe/TVC/main/subscriptions/xray/vless",
+    "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/All_Configs_Sub.txt",
+    "https://raw.githubusercontent.com/mft01/Free-V2ray-Config/main/All_Configs_Sub.txt",
+    "https://raw.githubusercontent.com/MrMohebi/xray-proxy-grabber/main/vless.txt",
     "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/githubmirror/ru-sni/vless_ru.txt",
-    "https://raw.githubusercontent.com/ByeWhiteLists/ByeWhiteLists2/main/ByeWhiteLists2.txt",
-    "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/sub/hysteria2",
-    "https://raw.githubusercontent.com/AvenCores/goida-vpn-configs/main/githubmirror/26.txt",
-    "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/WHITE-SNI-RU-all.txt"
+    "https://raw.githubusercontent.com/GoldCaviar/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt",
+    "https://raw.githubusercontent.com/ByeWhiteLists/ByeWhiteLists2/main/ByeWhiteLists2.txt"
 ]
 
 SUPPORTED_PROTOCOLS = ("vless://", "hysteria2://", "hy2://", "trojan://")
@@ -63,20 +63,17 @@ def parse_node(line):
         return None, None
 
 def is_anti_block_config(line):
-    """Строгий отбор: только Hysteria2 и VLESS с Reality / RU-SNI"""
+    """Оставляем только Hysteria2, Trojan и VLESS с Reality / TLS / RU-маскировкой"""
     line_lower = line.lower()
     
-    # Hysteria 2 / Hy2 идеально пробивают глушилки на мобильном инетe
-    if line_lower.startswith(("hysteria2://", "hy2://")):
+    if line_lower.startswith(("hysteria2://", "hy2://", "trojan://")):
         return True
         
-    # VLESS только с Reality или белым SNI
-    if line_lower.startswith("vless://") and "security=reality" in line_lower:
-        return True
-        
-    # Разрешаем конфигурации с маскировкой под RU-ресурсы (mail.ru, vk.com, Ozon и т.д.)
-    if any(ru_host in line_lower for ru_host in ['.ru', 'vk', 'mail', 'yandex', 'ozon', 'sber']):
-        return True
+    if line_lower.startswith("vless://"):
+        if "security=reality" in line_lower or "security=tls" in line_lower:
+            return True
+        if any(ru_host in line_lower for ru_host in ['.ru', 'vk', 'mail', 'yandex', 'ozon', 'sber']):
+            return True
 
     return False
 
@@ -84,10 +81,8 @@ def check_and_ping_node(item):
     line, host, port = item
     try:
         start_time = time.time()
-        
-        # Проверяем сокет
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(2.0)
+        sock.settimeout(1.5)
         res = sock.connect_ex((host, port))
         latency = (time.time() - start_time) * 1000
         sock.close()
@@ -142,9 +137,9 @@ def main():
         except Exception:
             continue
 
-    print(f"Отфильтровано только пробивных ключей: {len(raw_keys)}")
+    print(f"Собрано уникальных свежих ключей: {len(raw_keys)}")
 
-    raw_keys_list = list(raw_keys)[:2000]
+    raw_keys_list = list(raw_keys)[:2500]
 
     candidates = []
     for key in raw_keys_list:
@@ -159,10 +154,9 @@ def main():
             if line and host:
                 valid_nodes.append((line, host, latency))
 
-    # Сортировка по задержке
     valid_nodes.sort(key=lambda x: x[2])
 
-    # 1. WHITE LIST (Только VLESS-Reality)
+    # 1. WHITE LIST (В приоритете VLESS-Reality)
     white_candidates = [
         node for node in valid_nodes 
         if "security=reality" in node[0].lower() or "sni=" in node[0].lower()
@@ -174,7 +168,7 @@ def main():
         for idx, (line, host, latency, cc, country_name) in enumerate(white_top, 1)
     ]
 
-    # 2. CLEAN SUB (Приоритет Hysteria2 и стойких ключей)
+    # 2. CLEAN SUB (Общая свежая подборка)
     clean_top = filter_by_country_limit(valid_nodes, limit_per_country=2, max_total=20)
     
     final_clean_keys = [
@@ -182,7 +176,7 @@ def main():
         for idx, (line, host, latency, cc, country_name) in enumerate(clean_top, 1)
     ]
 
-    # Запись результатов
+    # Запись
     clean_content = "\n".join(final_clean_keys)
     white_content = "\n".join(final_white_keys)
 
@@ -198,7 +192,7 @@ def main():
     with open("white_list_base64.txt", "w", encoding="utf-8") as f:
         f.write(base64.b64encode(white_content.encode('utf-8')).decode('utf-8'))
 
-    print("Подписки обновлены только проверенными пробивными протоколами!")
+    print("Подписки успешно обновлены новыми базами!")
 
 if __name__ == "__main__":
     main()

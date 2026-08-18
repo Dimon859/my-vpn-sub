@@ -82,7 +82,7 @@ def check_and_ping_node(item):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(1.5)
         res = sock.connect_ex((host, port))
-        latency = (time.time() - start_time) * 1000  # Переводим в мс
+        latency = (time.time() - start_time) * 1000
         sock.close()
         
         if res == 0:
@@ -94,7 +94,6 @@ def check_and_ping_node(item):
 def format_node_name(line, country_code, country_name, index):
     """Приводит название сервера к красивому виду с флагом и пингом"""
     flag = country_code_to_emoji(country_code)
-    # Очищаем старое название после #
     base_key = line.split("#")[0]
     new_name = f"{flag} {country_name} #{index}"
     return f"{base_key}#{quote(new_name)}"
@@ -118,24 +117,28 @@ def main():
 
     print(f"Собрано уникальных ключей: {len(raw_keys)}")
 
+    # Ограничиваем выборку первыми 3000 ключами для молниеносной проверки
+    raw_keys_list = list(raw_keys)[:3000]
+    print(𝚏"Отправляем на проверку первые {len(raw_keys_list)} серверов...")
+
     candidates = []
-    for key in raw_keys:
+    for key in raw_keys_list:
         host, port = parse_node(key)
         if host and port:
             candidates.append((key, host, port))
 
-    # 2. Проверка связности и замер пинга
+    # 2. Проверка связности и замер пинга (увеличили потоки до 50 для скорости)
     valid_nodes = []
-    with ThreadPoolExecutor(max_workers=30) as executor:
+    with ThreadPoolExecutor(max_workers=50) as executor:
         results = executor.map(check_and_ping_node, candidates)
         for line, host, latency in results:
             if line and host:
                 valid_nodes.append((line, host, latency))
 
-    # 3. Сортировка по минимальному пингу (самые быстрые сверху)
+    # 3. Сортировка по минимальному пингу
     valid_nodes.sort(key=lambda x: x[2])
 
-    # 4. Дедупликация по IP (только 1 лучший сервер на 1 IP)
+    # 4. Дедупликация по IP
     unique_nodes = []
     seen_ips = set()
     for line, host, latency in valid_nodes:
@@ -156,9 +159,18 @@ def main():
         formatted_key = format_node_name(line, cc, country_name, country_counters[cc])
         final_keys.append(formatted_key)
 
-    # 7. Запись в чистый файл
+    # 7. Запись файлов (включая Base64 для удобства)
+    clean_content = "\n".join(final_keys)
+    
     with open("clean_sub.txt", "w", encoding="utf-8") as f:
-        f.write("\n".join(final_keys))
+        f.write(clean_content)
+
+    with open("white_list.txt", "w", encoding="utf-8") as f:
+        f.write(clean_content)
+
+    base64_content = base64.b64encode(clean_content.encode('utf-8')).decode('utf-8')
+    with open("clean_sub_base64.txt", "w", encoding="utf-8") as f:
+        f.write(base64_content)
 
     print(f"Успешно сохранено {len(final_keys)} самых быстрых серверов с флагами!")
 

@@ -6,15 +6,27 @@ from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor
 import base64
 
-# Сфокусированные свежие источники
+# Максимально полный набор источников подписок
 SOURCES = [
+    # Источники под РФ и RU-SNI / Reality
+    "https://raw.githubusercontent.com/GoldCaviar/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt",
+    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/githubmirror/ru-sni/vless_ru.txt",
+    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/githubmirror/clean/vless.txt",
+    "https://raw.githubusercontent.com/ByeWhiteLists/ByeWhiteLists2/main/ByeWhiteLists2.txt",
+    "https://raw.githubusercontent.com/AvenCores/goida-vpn-configs/main/githubmirror/26.txt",
+    "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/WHITE-SNI-RU-all.txt",
+    "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS_mobile.txt",
+    
+    # Крупные международные авто-обновляемые базы VLESS / Hy2
     "https://raw.githubusercontent.com/yebekhe/TVC/main/subscriptions/xray/vless",
     "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/All_Configs_Sub.txt",
     "https://raw.githubusercontent.com/mft01/Free-V2ray-Config/main/All_Configs_Sub.txt",
     "https://raw.githubusercontent.com/MrMohebi/xray-proxy-grabber/main/vless.txt",
-    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/githubmirror/ru-sni/vless_ru.txt",
-    "https://raw.githubusercontent.com/GoldCaviar/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt",
-    "https://raw.githubusercontent.com/ByeWhiteLists/ByeWhiteLists2/main/ByeWhiteLists2.txt"
+    "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/sub/vless",
+    "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/sub/hysteria2",
+    "https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/vless_configs.txt",
+    "https://raw.githubusercontent.com/awesome-vpn/awesome-vpn/master/all",
+    "https://raw.githubusercontent.com/Ltechify/v2ray-sub/main/vless.txt"
 ]
 
 SUPPORTED_PROTOCOLS = ("vless://", "hysteria2://", "hy2://", "trojan://")
@@ -28,7 +40,7 @@ def get_ip_location(host):
     try:
         url = f"http://ip-api.com/json/{host}?fields=status,countryCode,country"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=2) as resp:
+        with urllib.request.urlopen(req, timeout=1.5) as resp:
             data = json.loads(resp.read().decode('utf-8'))
             if data.get('status') == 'success':
                 return data.get('countryCode', 'XX'), data.get('country', 'Unknown')
@@ -63,7 +75,7 @@ def parse_node(line):
         return None, None
 
 def is_anti_block_config(line):
-    """Оставляем только Hysteria2, Trojan и VLESS с Reality / TLS / RU-маскировкой"""
+    """Отбираем только стойкие типы шифрования"""
     line_lower = line.lower()
     
     if line_lower.startswith(("hysteria2://", "hy2://", "trojan://")):
@@ -82,7 +94,7 @@ def check_and_ping_node(item):
     try:
         start_time = time.time()
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1.5)
+        sock.settimeout(1.2)
         res = sock.connect_ex((host, port))
         latency = (time.time() - start_time) * 1000
         sock.close()
@@ -99,7 +111,8 @@ def format_node_name(line, country_code, country_name, index):
     new_name = f"{flag} {country_name} #{index}"
     return f"{base_key}#{quote(new_name)}"
 
-def filter_by_country_limit(nodes, limit_per_country=2, max_total=20):
+def filter_by_country_limit(nodes, limit_per_country=15, max_total=300):
+    """Возвращает большую выборку серверов для локальной проверки в приложении"""
     selected = []
     country_counts = {}
     seen_ips = set()
@@ -137,9 +150,10 @@ def main():
         except Exception:
             continue
 
-    print(f"Собрано уникальных свежих ключей: {len(raw_keys)}")
+    print(f"Собрано уникальных ключей: {len(raw_keys)}")
 
-    raw_keys_list = list(raw_keys)[:2500]
+    # Берём до 5000 серверов на первичную проверку портов
+    raw_keys_list = list(raw_keys)[:5000]
 
     candidates = []
     for key in raw_keys_list:
@@ -148,7 +162,7 @@ def main():
             candidates.append((key, host, port))
 
     valid_nodes = []
-    with ThreadPoolExecutor(max_workers=50) as executor:
+    with ThreadPoolExecutor(max_workers=80) as executor:
         results = executor.map(check_and_ping_node, candidates)
         for line, host, latency in results:
             if line and host:
@@ -156,27 +170,27 @@ def main():
 
     valid_nodes.sort(key=lambda x: x[2])
 
-    # 1. WHITE LIST (В приоритете VLESS-Reality)
+    # 1. WHITE LIST (В приоритете VLESS-Reality и RU-SNI — до 150 шт)
     white_candidates = [
         node for node in valid_nodes 
-        if "security=reality" in node[0].lower() or "sni=" in node[0].lower()
+        if "security=reality" in node[0].lower() or "sni=" in node[0].lower() or ".ru" in node[0].lower()
     ]
-    white_top = filter_by_country_limit(white_candidates, limit_per_country=2, max_total=20)
+    white_top = filter_by_country_limit(white_candidates, limit_per_country=15, max_total=150)
     
     final_white_keys = [
         format_node_name(line, cc, country_name, idx)
         for idx, (line, host, latency, cc, country_name) in enumerate(white_top, 1)
     ]
 
-    # 2. CLEAN SUB (Общая свежая подборка)
-    clean_top = filter_by_country_limit(valid_nodes, limit_per_country=2, max_total=20)
+    # 2. CLEAN SUB (Общий большой список — до 300 шт)
+    clean_top = filter_by_country_limit(valid_nodes, limit_per_country=25, max_total=300)
     
     final_clean_keys = [
         format_node_name(line, cc, country_name, idx)
         for idx, (line, host, latency, cc, country_name) in enumerate(clean_top, 1)
     ]
 
-    # Запись
+    # Запись текстовых и Base64 файлов
     clean_content = "\n".join(final_clean_keys)
     white_content = "\n".join(final_white_keys)
 
@@ -192,7 +206,7 @@ def main():
     with open("white_list_base64.txt", "w", encoding="utf-8") as f:
         f.write(base64.b64encode(white_content.encode('utf-8')).decode('utf-8'))
 
-    print("Подписки успешно обновлены новыми базами!")
+    print("Подписки успешно обновлены большими списками!")
 
 if __name__ == "__main__":
     main()

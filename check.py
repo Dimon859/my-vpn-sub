@@ -1,4 +1,5 @@
 import urllib.request
+import urllib.parse
 import re
 import socket
 import base64
@@ -16,11 +17,7 @@ SOURCES = [
     "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/normal/mix"
 ]
 
-TEST_URLS = {
-    "youtube": "https://www.youtube.com/generate_204",
-    "instagram": "https://www.instagram.com",
-    "telegram": "https://t.me"
-}
+TEST_URL = "https://www.youtube.com/generate_204"
 
 def fetch_candidates():
     raw_keys = set()
@@ -46,7 +43,7 @@ def fetch_candidates():
             continue
     return list(raw_keys)
 
-def parse_node(link):
+def parse_host_port(link):
     try:
         m = re.search(r'@([^:/]+):(\d+)', link)
         if m:
@@ -59,104 +56,138 @@ def parse_node(link):
     return None, None
 
 def check_port(link):
-    host, port = parse_node(link)
+    host, port = parse_host_port(link)
     if not host or not port:
         return None
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(2.0)
-        result = sock.connect_ex((host, int(port)))
+        res = sock.connect_ex((host, port))
         sock.close()
-        if result == 0:
+        if res == 0:
             return link
     except Exception:
         pass
     return None
 
-def test_l7_via_proxy(proxy_port):
-    """Проверка доступности YouTube, Instagram и Telegram через локальный HTTP прокси"""
-    proxy_handler = urllib.request.ProxyHandler({'http': f'http://127.0.0.1:{proxy_port}', 'https': f'http://127.0.0.1:{proxy_port}'})
-    opener = urllib.request.build_opener(proxy_handler)
-    
-    for name, url in TEST_URLS.items():
-        try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with opener.open(req, timeout=4.0) as resp:
-                if resp.status not in [200, 204, 301, 302]:
-                    return False
-        except Exception:
-            return False
-    return True
+def build_singbox_outbound(link):
+    try:
+        parsed = urllib.parse.urlparse(link)
+        scheme = parsed.scheme.lower()
+        
+        if scheme == "vless":
+            uuid = parsed.username
+            host = parsed.hostname
+            port = parsed.port
+            params = urllib.parse.parse_qs(parsed.query)
+            
+            outbound = {
+                "type": "vless",
+                "tag": "proxy",
+                "server": host,
+                "server_port": port,
+                "uuid": uuid
+            }
+            if params.get("security", [""])[0] in ["tls", "reality"]:
+                tls_conf = {"enabled": True, "insecure": True}
+                if "sni" in params:
+                    tls_conf["server_name"] = params["sni"][0]
+                if params.get("security", [""])[0] == "reality":
+                    tls_conf["reality"] = {
+                        "enabled": True,
+                        "public_key": params.get("pbk", [""])[0],
+                        "short_id": params.get("sid", [""])[0]
+                    }
+                outbound["tls"] = tls_conf
+            if "type" in params and params["type"][0] == "ws":
+                outbound["transport"] = {"type": "ws", "path": params.get("path", ["/"])[0]}
+            return outbound
 
-def verify_with_singbox(link, local_port=10080):
-    """Генерация конфига sing-box и тест прохождения L7 трафика"""
+        elif scheme in ["hysteria2", "hy2"]:
+            auth = parsed.username or parsed.password
+            host = parsed.hostname
+            port = parsed.port
+            params = urllib.parse.parse_qs(parsed.query)
+            outbound = {
+                "type": "hysteria2",
+                "tag": "proxy",
+                "server": host,
+                "server_port": port,
+                "password": auth,
+                "tls": {"enabled": True, "insecure": True}
+            }
+            if "sni" in params:
+                outbound["tls"]["server_name"] = params["sni"][0]
+            return outbound
+    except Exception:
+        pass
+    return None
+
+def verify_l7(link, port=10080):
+    outbound = build_singbox_outbound(link)
+    if not outbound:
+        return False
+
     config = {
-        "inbounds": [{
-            "type": "http",
-            "tag": "http-in",
-            "listen": "127.0.0.1",
-            "listen_port": local_port
-        }],
-        "outbounds": []
+        "inbounds": [{"type": "http", "tag": "http-in", "listen": "127.0.0.1", "listen_port": port}],
+        "outbounds": [outbound]
     }
-    
-    # Запуск sing-box во временном процессе
-    config_file = f"/tmp/sb_{local_port}.json"
-    with open(config_file, "w") as f:
+
+    cfg_path = f"/tmp/sb_{port}.json"
+    with open(cfg_path, "w") as f:
         json.dump(config, f)
 
     proc = None
     try:
-        # Конвертируем URI в структуру sing-box через утилиту или запускаем узел
-        proc = subprocess.Popen(["sing-box", "run", "-c", config_file], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(0.5)
+        proc = subprocess.Popen(["sing-box", "run", "-c", cfg_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(0.8)
+
+        proxy_handler = urllib.request.ProxyHandler({'http': f'http://127.0.0.1:{port}', 'https': f'http://127.0.0.1:{port}'})
+        opener = urllib.request.build_opener(proxy_handler)
+        req = urllib.request.Request(TEST_URL, headers={'User-Agent': 'Mozilla/5.0'})
         
-        # Проверяем прохождение трафика
-        is_working = test_l7_via_proxy(local_port)
-        return link if is_working else None
+        with opener.open(req, timeout=3.0) as resp:
+            if resp.status in [200, 204]:
+                return True
     except Exception:
-        return None
+        return False
     finally:
         if proc:
             proc.terminate()
             proc.wait()
-        if os.path.exists(config_file):
-            os.remove(config_file)
+        if os.path.exists(cfg_path):
+            os.remove(cfg_path)
+    return False
 
 def main():
     print("1. Скачивание конфигураций...")
     candidates = fetch_candidates()
     print(f"   Загружено кандидатов: {len(candidates)}")
 
-    print("2. Этап 1: Быстрый отбор по TCP-порту...")
+    print("2. Этап 1: Фильтр по TCP-порту...")
     passed_tcp = []
-    with ThreadPoolExecutor(max_workers=60) as executor:
-        results = executor.map(check_port, candidates)
-        for res in results:
+    with ThreadPoolExecutor(max_workers=50) as executor:
+        for res in executor.map(check_port, candidates):
             if res:
                 passed_tcp.append(res)
-                if len(passed_tcp) >= 100:
+                if len(passed_tcp) >= 150:
                     break
+    print(f"   Открытые порты у {len(passed_tcp)} узлов.")
 
-    print(f"   Открытые порты подтверждены у: {len(passed_tcp)} серверов.")
-
-    print("3. Этап 2: Глубокая проверка L7 (YouTube + Instagram + Telegram)...")
+    print("3. Этап 2: Настоящая L7-проверка через sing-box...")
     final_working = []
-    
-    # На данном этапе сопоставляем доступность через быстрый фильтр
-    for idx, link in enumerate(passed_tcp[:40]):
-        # Прямая проверка подключения к ресурсам
-        if check_port(link):
+    for link in passed_tcp:
+        if verify_l7(link):
             final_working.append(link)
-            print(f"   [+] Сервер #{len(final_working)} прошел проверку доступа.")
-            if len(final_working) >= 20:
+            print(f"   [+] Сервер #{len(final_working)} прошел честный HTTP-тест!")
+            if len(final_working) >= 15:
                 break
 
     if not final_working:
-        print("   Внимание: Ни один сервер не прошел полный L7-тест. Файлы не перезаписаны.")
+        print("   Ни один сервер не прошел L7-тест.")
         return
 
-    print(f"4. Сохранение {len(final_working)} отобранных серверов...")
+    print(f"4. Сохранение {len(final_working)} проверенных серверов...")
     with open("clean_sub.txt", "w", encoding="utf-8") as f:
         f.write("\n".join(final_working))
 
@@ -164,7 +195,7 @@ def main():
     with open("clean_sub_base64.txt", "w", encoding="utf-8") as f:
         f.write(b64_content)
 
-    print("Готово! Подписка успешно обновлена.")
+    print("Готово!")
 
 if __name__ == "__main__":
     main()

@@ -2,34 +2,32 @@ import urllib.request
 import socket
 import json
 import time
-from urllib.parse import quote
+import subprocess
+import os
+import tempfile
+from urllib.parse import quote, parse_qs, urlparse
 from concurrent.futures import ThreadPoolExecutor
 import base64
 
-# Максимально полный набор источников подписок
 SOURCES = [
-    # Источники под РФ и RU-SNI / Reality
     "https://raw.githubusercontent.com/GoldCaviar/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt",
     "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/githubmirror/ru-sni/vless_ru.txt",
     "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/githubmirror/clean/vless.txt",
     "https://raw.githubusercontent.com/ByeWhiteLists/ByeWhiteLists2/main/ByeWhiteLists2.txt",
     "https://raw.githubusercontent.com/AvenCores/goida-vpn-configs/main/githubmirror/26.txt",
     "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/WHITE-SNI-RU-all.txt",
-    "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS_mobile.txt",
-    
-    # Крупные международные авто-обновляемые базы VLESS / Hy2
     "https://raw.githubusercontent.com/yebekhe/TVC/main/subscriptions/xray/vless",
     "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/All_Configs_Sub.txt",
     "https://raw.githubusercontent.com/mft01/Free-V2ray-Config/main/All_Configs_Sub.txt",
-    "https://raw.githubusercontent.com/MrMohebi/xray-proxy-grabber/main/vless.txt",
-    "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/sub/vless",
-    "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/sub/hysteria2",
-    "https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/vless_configs.txt",
-    "https://raw.githubusercontent.com/awesome-vpn/awesome-vpn/master/all",
-    "https://raw.githubusercontent.com/Ltechify/v2ray-sub/main/vless.txt"
+    "https://raw.githubusercontent.com/MrMohebi/xray-proxy-grabber/main/vless.txt"
 ]
 
 SUPPORTED_PROTOCOLS = ("vless://", "hysteria2://", "hy2://", "trojan://")
+TEST_URLS = [
+    "https://www.youtube.com",
+    "https://www.instagram.com",
+    "https://api.telegram.org"
+]
 
 def country_code_to_emoji(country_code):
     if not country_code or len(country_code) != 2 or country_code == "XX":
@@ -74,36 +72,124 @@ def parse_node(line):
     except Exception:
         return None, None
 
-def is_anti_block_config(line):
-    """Отбираем только стойкие типы шифрования"""
-    line_lower = line.lower()
-    
-    if line_lower.startswith(("hysteria2://", "hy2://", "trojan://")):
-        return True
-        
-    if line_lower.startswith("vless://"):
-        if "security=reality" in line_lower or "security=tls" in line_lower:
-            return True
-        if any(ru_host in line_lower for ru_host in ['.ru', 'vk', 'mail', 'yandex', 'ozon', 'sber']):
-            return True
-
-    return False
-
-def check_and_ping_node(item):
+def check_tcp_port(item):
     line, host, port = item
     try:
         start_time = time.time()
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1.2)
+        sock.settimeout(1.5)
         res = sock.connect_ex((host, port))
         latency = (time.time() - start_time) * 1000
         sock.close()
-        
         if res == 0:
             return line, host, round(latency, 1)
     except Exception:
         pass
     return None, None, None
+
+def build_singbox_outbound(line):
+    try:
+        parsed = urlparse(line)
+        protocol = parsed.scheme
+        user_info = parsed.username or parsed.netloc.split("@")[0]
+        host = parsed.hostname
+        port = parsed.port
+        params = parse_qs(parsed.query)
+
+        if protocol == "vless":
+            outbound = {
+                "type": "vless",
+                "tag": "proxy",
+                "server": host,
+                "server_port": port,
+                "uuid": user_info,
+                "flow": params.get("flow", [""])[0]
+            }
+            security = params.get("security", ["none"])[0]
+            if security in ["tls", "reality"]:
+                tls_conf = {
+                    "enabled": True,
+                    "server_name": params.get("sni", [params.get("servername", [""])[0]])[0],
+                    "insecure": True
+                }
+                if security == "reality":
+                    tls_conf["reality"] = {
+                        "enabled": True,
+                        "public_key": params.get("pbk", [""])[0],
+                        "short_id": params.get("sid", [""])[0]
+                    }
+                outbound["tls"] = tls_conf
+            return outbound
+
+        elif protocol in ["hysteria2", "hy2"]:
+            return {
+                "type": "hysteria2",
+                "tag": "proxy",
+                "server": host,
+                "server_port": port,
+                "password": user_info,
+                "tls": {
+                    "enabled": True,
+                    "server_name": params.get("sni", [""])[0],
+                    "insecure": True
+                }
+            }
+    except Exception:
+        pass
+    return None
+
+def verify_services_via_singbox(line, port_index):
+    outbound = build_singbox_outbound(line)
+    if not outbound:
+        return False
+
+    socks_port = 20000 + (port_index % 500)
+    config = {
+        "log": {"level": "panic"},
+        "inbounds": [{
+            "type": "socks",
+            "tag": "socks-in",
+            "listen": "127.0.0.1",
+            "listen_port": socks_port
+        }],
+        "outbounds": [outbound]
+    }
+
+    with tempfile.NamedTemporaryFile("w", delete=False, suffix=".json") as f:
+        json.dump(config, f)
+        config_path = f.name
+
+    proc = None
+    try:
+        proc = subprocess.Popen(
+            ["sing-box", "run", "-c", config_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        time.sleep(0.4)
+
+        proxy_url = f"socks5h://127.0.0.1:{socks_port}"
+        success_count = 0
+
+        for target_url in TEST_URLS:
+            try:
+                cmd = ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "3.5", "--proxy", proxy_url, target_url]
+                res = subprocess.run(cmd, capture_output=True, text=True)
+                if res.stdout.strip() in ["200", "301", "302", "404"]:
+                    success_count += 1
+            except Exception:
+                pass
+
+        return success_count == len(TEST_URLS)
+
+    except Exception:
+        return False
+    finally:
+        if proc:
+            proc.kill()
+            proc.wait()
+        if os.path.exists(config_path):
+            os.remove(config_path)
 
 def format_node_name(line, country_code, country_name, index):
     flag = country_code_to_emoji(country_code)
@@ -111,8 +197,7 @@ def format_node_name(line, country_code, country_name, index):
     new_name = f"{flag} {country_name} #{index}"
     return f"{base_key}#{quote(new_name)}"
 
-def filter_by_country_limit(nodes, limit_per_country=15, max_total=300):
-    """Возвращает большую выборку серверов для локальной проверки в приложении"""
+def filter_by_country_limit(nodes, limit_per_country=5, max_total=50):
     selected = []
     country_counts = {}
     seen_ips = set()
@@ -145,68 +230,66 @@ def main():
                 content = decode_base64_if_needed(content)
                 for line in content.splitlines():
                     line = line.strip()
-                    if line.startswith(SUPPORTED_PROTOCOLS) and is_anti_block_config(line):
+                    if line.startswith(SUPPORTED_PROTOCOLS):
+                        if line.startswith("vless://") and not ("security=reality" in line.lower() or "security=tls" in line.lower()):
+                            continue
                         raw_keys.add(line)
         except Exception:
             continue
 
-    print(f"Собрано уникальных ключей: {len(raw_keys)}")
-
-    # Берём до 5000 серверов на первичную проверку портов
-    raw_keys_list = list(raw_keys)[:5000]
+    print(f"Загружено уникальных кандидатов: {len(raw_keys)}")
 
     candidates = []
-    for key in raw_keys_list:
+    for key in list(raw_keys)[:2500]:
         host, port = parse_node(key)
         if host and port:
             candidates.append((key, host, port))
 
-    valid_nodes = []
-    with ThreadPoolExecutor(max_workers=80) as executor:
-        results = executor.map(check_and_ping_node, candidates)
+    print("Этап 1: Быстрая проверка портов через провайдера...")
+    stage1_passed = []
+    with ThreadPoolExecutor(max_workers=60) as executor:
+        results = executor.map(check_tcp_port, candidates)
         for line, host, latency in results:
             if line and host:
-                valid_nodes.append((line, host, latency))
+                stage1_passed.append((line, host, latency))
 
-    valid_nodes.sort(key=lambda x: x[2])
+    print(f"Прошли первичную проверку: {len(stage1_passed)} серверов.")
+    print("Этап 2: Глубокая проверка сервисов (YouTube, Instagram, Telegram) через sing-box...")
 
-    # 1. WHITE LIST (В приоритете VLESS-Reality и RU-SNI — до 150 шт)
-    white_candidates = [
-        node for node in valid_nodes 
-        if "security=reality" in node[0].lower() or "sni=" in node[0].lower() or ".ru" in node[0].lower()
-    ]
-    white_top = filter_by_country_limit(white_candidates, limit_per_country=15, max_total=150)
+    fully_working_nodes = []
     
-    final_white_keys = [
-        format_node_name(line, cc, country_name, idx)
-        for idx, (line, host, latency, cc, country_name) in enumerate(white_top, 1)
-    ]
+    def worker(idx_item):
+        idx, (line, host, latency) = idx_item
+        if verify_services_via_singbox(line, idx):
+            return line, host, latency
+        return None, None, None
 
-    # 2. CLEAN SUB (Общий большой список — до 300 шт)
-    clean_top = filter_by_country_limit(valid_nodes, limit_per_country=25, max_total=300)
+    indexed_candidates = list(enumerate(stage1_passed[:150]))
+    with ThreadPoolExecutor(max_workers=15) as executor:
+        results = executor.map(worker, indexed_candidates)
+        for line, host, latency in results:
+            if line and host:
+                fully_working_nodes.append((line, host, latency))
+
+    fully_working_nodes.sort(key=lambda x: x[2])
+    print(f"Итого проверенных 100% рабочих серверов: {len(fully_working_nodes)}")
+
+    top_nodes = filter_by_country_limit(fully_working_nodes, limit_per_country=5, max_total=50)
     
-    final_clean_keys = [
+    final_keys = [
         format_node_name(line, cc, country_name, idx)
-        for idx, (line, host, latency, cc, country_name) in enumerate(clean_top, 1)
+        for idx, (line, host, latency, cc, country_name) in enumerate(top_nodes, 1)
     ]
 
-    # Запись текстовых и Base64 файлов
-    clean_content = "\n".join(final_clean_keys)
-    white_content = "\n".join(final_white_keys)
+    clean_content = "\n".join(final_keys)
 
     with open("clean_sub.txt", "w", encoding="utf-8") as f:
         f.write(clean_content)
 
-    with open("white_list.txt", "w", encoding="utf-8") as f:
-        f.write(white_content)
-
     with open("clean_sub_base64.txt", "w", encoding="utf-8") as f:
         f.write(base64.b64encode(clean_content.encode('utf-8')).decode('utf-8'))
 
-    with open("white_list_base64.txt", "w", encoding="utf-8") as f:
-        f.write(base64.b64encode(white_content.encode('utf-8')).decode('utf-8'))
-
-    print("Подписки успешно обновлены большими списками!")
+    print("Подписка с проверенными ресурсами сформирована!")
 
 if __name__ == "__main__":
     main()

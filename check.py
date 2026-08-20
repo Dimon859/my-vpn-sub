@@ -19,6 +19,9 @@ SOURCES = [
 
 TEST_URL = "https://www.youtube.com/generate_204"
 
+def clean_string(s):
+    return s.strip().replace('\r', '').replace('\n', '')
+
 def fetch_candidates():
     raw_keys = set()
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
@@ -26,10 +29,10 @@ def fetch_candidates():
         try:
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=8) as response:
-                content = response.read().decode('utf-8', errors='ignore').strip()
+                content = response.read().decode('utf-8', errors='ignore')
                 text_to_search = content
                 try:
-                    padded = content + "=" * ((4 - len(content) % 4) % 4)
+                    padded = content.strip() + "=" * ((4 - len(content.strip()) % 4) % 4)
                     decoded = base64.b64decode(padded).decode('utf-8', errors='ignore')
                     if "://" in decoded:
                         text_to_search = decoded
@@ -38,7 +41,7 @@ def fetch_candidates():
 
                 found = re.findall(r'(?:vless|vmess|hysteria2|hy2|trojan|ss)://[^\s\r\n\'"]+', text_to_search, re.IGNORECASE)
                 for key in found:
-                    raw_keys.add(key.strip())
+                    raw_keys.add(clean_string(key))
         except Exception:
             continue
     return list(raw_keys)
@@ -61,7 +64,7 @@ def check_port(link):
         return None
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(2.0)
+        sock.settimeout(1.5)
         res = sock.connect_ex((host, port))
         sock.close()
         if res == 0:
@@ -72,7 +75,8 @@ def check_port(link):
 
 def build_singbox_outbound(link):
     try:
-        parsed = urllib.parse.urlparse(link)
+        clean_link = clean_string(link)
+        parsed = urllib.parse.urlparse(clean_link)
         scheme = parsed.scheme.lower()
         
         if scheme == "vless":
@@ -80,26 +84,16 @@ def build_singbox_outbound(link):
             host = parsed.hostname
             port = parsed.port
             params = urllib.parse.parse_qs(parsed.query)
-            
-            outbound = {
-                "type": "vless",
-                "tag": "proxy",
-                "server": host,
-                "server_port": port,
-                "uuid": uuid
-            }
-            if params.get("security", [""])[0] in ["tls", "reality"]:
+            if not host or not port or not uuid: return None
+            outbound = {"type": "vless", "tag": "proxy", "server": host, "server_port": port, "uuid": uuid}
+            sec = params.get("security", [""])[0]
+            if sec in ["tls", "reality"]:
                 tls_conf = {"enabled": True, "insecure": True}
-                if "sni" in params:
-                    tls_conf["server_name"] = params["sni"][0]
-                if params.get("security", [""])[0] == "reality":
-                    tls_conf["reality"] = {
-                        "enabled": True,
-                        "public_key": params.get("pbk", [""])[0],
-                        "short_id": params.get("sid", [""])[0]
-                    }
+                if "sni" in params: tls_conf["server_name"] = params["sni"][0]
+                if sec == "reality":
+                    tls_conf["reality"] = {"enabled": True, "public_key": params.get("pbk", [""])[0], "short_id": params.get("sid", [""])[0]}
                 outbound["tls"] = tls_conf
-            if "type" in params and params["type"][0] == "ws":
+            if params.get("type", [""])[0] == "ws":
                 outbound["transport"] = {"type": "ws", "path": params.get("path", ["/"])[0]}
             return outbound
 
@@ -108,16 +102,19 @@ def build_singbox_outbound(link):
             host = parsed.hostname
             port = parsed.port
             params = urllib.parse.parse_qs(parsed.query)
-            outbound = {
-                "type": "hysteria2",
-                "tag": "proxy",
-                "server": host,
-                "server_port": port,
-                "password": auth,
-                "tls": {"enabled": True, "insecure": True}
-            }
-            if "sni" in params:
-                outbound["tls"]["server_name"] = params["sni"][0]
+            if not host or not port or not auth: return None
+            outbound = {"type": "hysteria2", "tag": "proxy", "server": host, "server_port": port, "password": auth, "tls": {"enabled": True, "insecure": True}}
+            if "sni" in params: outbound["tls"]["server_name"] = params["sni"][0]
+            return outbound
+
+        elif scheme == "trojan":
+            password = parsed.username
+            host = parsed.hostname
+            port = parsed.port
+            params = urllib.parse.parse_qs(parsed.query)
+            if not host or not port or not password: return None
+            outbound = {"type": "trojan", "tag": "proxy", "server": host, "server_port": port, "password": password, "tls": {"enabled": True, "insecure": True}}
+            if "sni" in params: outbound["tls"]["server_name"] = params["sni"][0]
             return outbound
     except Exception:
         pass
@@ -140,7 +137,7 @@ def verify_l7(link, port=10080):
     proc = None
     try:
         proc = subprocess.Popen(["sing-box", "run", "-c", cfg_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(0.8)
+        time.sleep(0.6)
 
         proxy_handler = urllib.request.ProxyHandler({'http': f'http://127.0.0.1:{port}', 'https': f'http://127.0.0.1:{port}'})
         opener = urllib.request.build_opener(proxy_handler)
@@ -164,30 +161,30 @@ def main():
     candidates = fetch_candidates()
     print(f"   Загружено кандидатов: {len(candidates)}")
 
-    print("2. Этап 1: Фильтр по TCP-порту...")
+    print("2. Предварительный отбор по открытым портам...")
     passed_tcp = []
-    with ThreadPoolExecutor(max_workers=50) as executor:
+    with ThreadPoolExecutor(max_workers=60) as executor:
         for res in executor.map(check_port, candidates):
             if res:
                 passed_tcp.append(res)
-                if len(passed_tcp) >= 150:
+                if len(passed_tcp) >= 200:
                     break
     print(f"   Открытые порты у {len(passed_tcp)} узлов.")
 
-    print("3. Этап 2: Настоящая L7-проверка через sing-box...")
+    print("3. Настоящий L7-тест доступности (YouTube)...")
     final_working = []
     for link in passed_tcp:
         if verify_l7(link):
             final_working.append(link)
-            print(f"   [+] Сервер #{len(final_working)} прошел честный HTTP-тест!")
+            print(f"   [+] Найден рабочий сервер #{len(final_working)}")
             if len(final_working) >= 15:
                 break
 
     if not final_working:
-        print("   Ни один сервер не прошел L7-тест.")
+        print("   Внимание: Настоящую L7-проверку никто не прошёл. Перезапись отменена.")
         return
 
-    print(f"4. Сохранение {len(final_working)} проверенных серверов...")
+    print(f"4. Сохранение {len(final_working)} 100% рабочих серверов...")
     with open("clean_sub.txt", "w", encoding="utf-8") as f:
         f.write("\n".join(final_working))
 
@@ -195,7 +192,7 @@ def main():
     with open("clean_sub_base64.txt", "w", encoding="utf-8") as f:
         f.write(b64_content)
 
-    print("Готово!")
+    print("Успешно завершено!")
 
 if __name__ == "__main__":
     main()

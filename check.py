@@ -9,9 +9,9 @@ import time
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-# Огромный массив проверенных источников (35+ подписок, 30.000+ узлов)
+# Расширенный список источников (60+ агрегаторов и подписок)
 SOURCES = [
-    # Основные гигантские подписки
+    # GitHub Aggregators & Auto-collectors
     "https://raw.githubusercontent.com/freefq/free/master/v2ray",
     "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/All_Configs_Sub.txt",
     "https://raw.githubusercontent.com/Esl3m/vpn/main/v2ray",
@@ -30,7 +30,6 @@ SOURCES = [
     "https://raw.githubusercontent.com/alien-vpn/free-vpn/main/sub.txt",
     "https://raw.githubusercontent.com/v2ray-free/free-v2ray-config/main/sub.txt",
     "https://raw.githubusercontent.com/vpn-collector/free-sub/main/sub.txt",
-    # Дополнительные крупные пулы
     "https://raw.githubusercontent.com/roosterkiev/optimus/main/sub.txt",
     "https://raw.githubusercontent.com/shafinet/v2ray-configs/main/all.txt",
     "https://raw.githubusercontent.com/coldbird-sub/v2ray/main/sub.txt",
@@ -43,11 +42,33 @@ SOURCES = [
     "https://raw.githubusercontent.com/V2ray-Central/v2ray-sub/main/sub.txt",
     "https://raw.githubusercontent.com/BtechVpn/V2ray-Collector/main/sub.txt",
     "https://raw.githubusercontent.com/erik-sub/v2ray-collector/main/sub.txt",
+    # Telegram-based categories
     "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/reality/mix",
     "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/vmess/mix",
     "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/vless/mix",
     "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/trojan/mix",
-    "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/shadowsocks/mix"
+    "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/shadowsocks/mix",
+    # Additional large nodes feeds
+    "https://raw.githubusercontent.com/aungthurha/v2ray-collector/main/sub.txt",
+    "https://raw.githubusercontent.com/K3R3M-K/v2ray-collector/main/sub.txt",
+    "https://raw.githubusercontent.com/mhayas/v2ray-sub/main/sub.txt",
+    "https://raw.githubusercontent.com/darknessv2ray/v2ray-sub/main/sub.txt",
+    "https://raw.githubusercontent.com/Snape-v2ray/V2ray-Configs/main/All_Configs_Sub.txt",
+    "https://raw.githubusercontent.com/404p/v2ray-sub/main/sub.txt",
+    "https://raw.githubusercontent.com/Mo-V2ray/V2ray-Configs/main/sub.txt",
+    "https://raw.githubusercontent.com/Bayan-V2ray/V2ray-Configs/main/sub.txt",
+    "https://raw.githubusercontent.com/vless-nodes/vless/main/sub.txt",
+    "https://raw.githubusercontent.com/free-v2ray/v2ray-node/master/sub.txt",
+    "https://raw.githubusercontent.com/Sora-V2ray/V2ray-Configs/main/sub.txt",
+    "https://raw.githubusercontent.com/OpenV2Ray/V2Ray-Config/main/sub.txt",
+    "https://raw.githubusercontent.com/ShadowSocks-Nodes/ShadowSocks/main/sub.txt",
+    "https://raw.githubusercontent.com/Xray-Nodes/Xray-Configs/main/sub.txt",
+    "https://raw.githubusercontent.com/FreeV2RayNodes/V2Ray/main/sub.txt",
+    "https://raw.githubusercontent.com/V2ray-Free-Nodes/V2Ray/main/sub.txt",
+    "https://raw.githubusercontent.com/v2ray-sub-pool/v2ray/main/sub.txt",
+    "https://raw.githubusercontent.com/VPN-Collector/V2Ray-Collector/main/sub.txt",
+    "https://raw.githubusercontent.com/Fast-V2Ray/V2Ray-Configs/main/sub.txt",
+    "https://raw.githubusercontent.com/Pro-V2Ray/V2Ray-Configs/main/sub.txt"
 ]
 
 TEST_URLS = [
@@ -64,6 +85,8 @@ COUNTRY_FLAGS = {
 }
 
 IP_CACHE = {}
+MAX_PER_COUNTRY = 3  # Максимум 3 сервера от одной страны для разнообразия
+TARGET_TOTAL_SERVERS = 40  # Всего рабочих серверов в готовой подписке
 
 def get_country_info(host):
     if host in IP_CACHE:
@@ -219,10 +242,7 @@ def verify_l7(link, port=10080):
             os.remove(cfg_path)
     return False
 
-def rename_link(link, index):
-    host, _ = parse_host_port(link)
-    code, flag = get_country_info(host) if host else ("UN", "🌐")
-    
+def rename_link(link, index, code, flag):
     scheme = link.split("://")[0].upper()
     if scheme == "HY2": scheme = "Hysteria2"
 
@@ -231,7 +251,7 @@ def rename_link(link, index):
     return f"{base_part}#{urllib.parse.quote(clean_label)}"
 
 def main():
-    print("1. Скачивание баз подписок...")
+    print("1. Скачивание расширенных баз подписок...")
     candidates = fetch_candidates()
     print(f"   Загружено кандидатов: {len(candidates)}")
 
@@ -243,21 +263,31 @@ def main():
                 passed_tcp.append(res)
     print(f"   Открытые порты у {len(passed_tcp)} узлов.")
 
-    print("3. HTTP GET проверка доступности YouTube, Instagram и Telegram...")
+    print("3. HTTP GET проверка с распределением по странам...")
     final_working = []
+    country_counts = {}
+
     for link in passed_tcp:
+        host, _ = parse_host_port(link)
+        code, flag = get_country_info(host) if host else ("UN", "🌐")
+
+        if country_counts.get(code, 0) >= MAX_PER_COUNTRY:
+            continue
+
         if verify_l7(link):
-            renamed = rename_link(link, len(final_working) + 1)
+            country_counts[code] = country_counts.get(code, 0) + 1
+            renamed = rename_link(link, country_counts[code], code, flag)
             final_working.append(renamed)
-            print(f"   [+] Найден рабочий сервер #{len(final_working)}: {urllib.parse.unquote(renamed.split('#')[-1])}")
-            if len(final_working) >= 50:
+            print(f"   [+] Найден сервер #{len(final_working)} ({code}): {urllib.parse.unquote(renamed.split('#')[-1])}")
+            
+            if len(final_working) >= TARGET_TOTAL_SERVERS:
                 break
 
     if not final_working:
         print("   Рабочих серверов не найдено.")
         return
 
-    print(f"4. Сохранение {len(final_working)} серверов...")
+    print(f"4. Сохранение {len(final_working)} разноплановых серверов...")
     with open("clean_sub.txt", "w", encoding="utf-8") as f:
         f.write("\n".join(final_working))
 

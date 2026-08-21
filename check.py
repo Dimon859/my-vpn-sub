@@ -7,20 +7,16 @@ import json
 import subprocess
 import time
 import os
+import random
 from concurrent.futures import ThreadPoolExecutor
 
-# Только 100% проверенные и стабильные источники (без 404 ошибок)
+# Большой список источников (с исправленной ссылкой soroushmirzaei)
 SOURCES = [
-    # 1. mfuu
     "https://raw.githubusercontent.com/mfuu/v2ray/master/v2ray",
-    # 2. Mahdi Bland (4000+ узлов)
-    "https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/sub/sub_merge.txt",
-    # 3. 0xRadikal (Только верифицированные узлы)
     "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/verified/configs.txt",
-    # 4. barry-far (7000+ узлов)
     "https://raw.githubusercontent.com/barry-far/V2ray-Config/main/All_Configs_Sub.txt",
-    # 5. ebrasha (1600+ узлов)
-    "https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/main/V2Ray-Config-By-EbraSha.txt"
+    "https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/main/V2Ray-Config-By-EbraSha.txt",
+    "https://raw.githubusercontent.com/mahdibland/ShadowsocksAggregator/master/sub/sub_merge.txt"
 ]
 
 TEST_URLS = [
@@ -37,8 +33,8 @@ COUNTRY_FLAGS = {
 }
 
 IP_CACHE = {}
-MAX_PER_COUNTRY = 3
-TARGET_TOTAL_SERVERS = 30
+MAX_PER_COUNTRY = 10
+TARGET_TOTAL_SERVERS = 100
 
 def get_country_info(host):
     if host in IP_CACHE:
@@ -205,6 +201,19 @@ def rename_link(link, index, code, flag):
     base_part = link.split("#")[0]
     return f"{base_part}#{urllib.parse.quote(clean_label)}"
 
+def auto_push():
+    print("\n5. Публикация обновлений на GitHub...")
+    try:
+        subprocess.run(["git", "add", "."], check=True)
+        subprocess.run(["git", "commit", "-m", "Auto-update subscription list"], check=False)
+        res = subprocess.run(["git", "push"], capture_output=True, text=True)
+        if res.returncode == 0:
+            print("   [+] Базы успешно выгружены на GitHub!")
+        else:
+            print(f"   [-] Ошибка при git push: {res.stderr.strip()}")
+    except Exception as e:
+        print(f"   [-] Ошибка выполнения git: {e}")
+
 def main():
     print("1. Скачивание проверенных баз подписок...")
     candidates = fetch_candidates()
@@ -217,6 +226,9 @@ def main():
             if res:
                 passed_tcp.append(res)
     print(f"   Открытые порты у {len(passed_tcp)} узлов.")
+
+    # Перемешиваем кандидаты для равномерного распределения протоколов
+    random.shuffle(passed_tcp)
 
     print("\n3. HTTP GET проверка с разбавлением по странам...")
     final_working = []
@@ -250,6 +262,7 @@ def main():
     with open("clean_sub_base64.txt", "w", encoding="utf-8") as f:
         f.write(b64_content)
 
+    auto_push()
     print("Готово!")
 
 if __name__ == "__main__":

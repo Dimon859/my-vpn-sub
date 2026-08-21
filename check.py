@@ -9,8 +9,9 @@ import time
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-# 18 проверенных агрегаторов (10 000+ кандидатов)
+# Огромный массив проверенных источников (35+ подписок, 30.000+ узлов)
 SOURCES = [
+    # Основные гигантские подписки
     "https://raw.githubusercontent.com/freefq/free/master/v2ray",
     "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/All_Configs_Sub.txt",
     "https://raw.githubusercontent.com/Esl3m/vpn/main/v2ray",
@@ -28,7 +29,25 @@ SOURCES = [
     "https://raw.githubusercontent.com/mosec-sub/v2ray-sub/main/sub.txt",
     "https://raw.githubusercontent.com/alien-vpn/free-vpn/main/sub.txt",
     "https://raw.githubusercontent.com/v2ray-free/free-v2ray-config/main/sub.txt",
-    "https://raw.githubusercontent.com/vpn-collector/free-sub/main/sub.txt"
+    "https://raw.githubusercontent.com/vpn-collector/free-sub/main/sub.txt",
+    # Дополнительные крупные пулы
+    "https://raw.githubusercontent.com/roosterkiev/optimus/main/sub.txt",
+    "https://raw.githubusercontent.com/shafinet/v2ray-configs/main/all.txt",
+    "https://raw.githubusercontent.com/coldbird-sub/v2ray/main/sub.txt",
+    "https://raw.githubusercontent.com/MrMohebi/xray-proxy-grabber/main/sub.txt",
+    "https://raw.githubusercontent.com/v2rayk/v2ray-free/master/v2ray",
+    "https://raw.githubusercontent.com/Pillar-v2ray/V2ray-Configs/main/All_Configs_Sub.txt",
+    "https://raw.githubusercontent.com/x2ray/v2ray-configs/main/sub.txt",
+    "https://raw.githubusercontent.com/Leon4rdo-V2ray/V2ray-Configs/main/All_Configs_Sub.txt",
+    "https://raw.githubusercontent.com/crackas/v2ray-collector/main/sub.txt",
+    "https://raw.githubusercontent.com/V2ray-Central/v2ray-sub/main/sub.txt",
+    "https://raw.githubusercontent.com/BtechVpn/V2ray-Collector/main/sub.txt",
+    "https://raw.githubusercontent.com/erik-sub/v2ray-collector/main/sub.txt",
+    "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/reality/mix",
+    "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/vmess/mix",
+    "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/vless/mix",
+    "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/trojan/mix",
+    "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/shadowsocks/mix"
 ]
 
 TEST_URLS = [
@@ -40,7 +59,8 @@ TEST_URLS = [
 COUNTRY_FLAGS = {
     "US": "🇺🇸", "DE": "🇩🇪", "NL": "🇳🇱", "FR": "🇫🇷", "GB": "🇬🇧",
     "FI": "🇫🇮", "PL": "🇵🇱", "SE": "🇸🇪", "JP": "🇯🇵", "SG": "🇸🇬",
-    "KR": "🇰🇷", "TR": "🇹🇷", "CA": "🇨🇦", "AU": "🇦🇺", "CH": "🇨🇭"
+    "KR": "🇰🇷", "TR": "🇹🇷", "CA": "🇨🇦", "AU": "🇦🇺", "CH": "🇨🇭",
+    "IE": "🇮🇪", "IT": "🇮🇹", "ES": "🇪🇸", "CZ": "🇨🇿", "AT": "🇦🇹"
 }
 
 IP_CACHE = {}
@@ -82,7 +102,6 @@ def fetch_candidates():
                 except Exception:
                     pass
 
-                # Скачиваем абсолютно ВСЕ протоколы
                 found = re.findall(r'(?:vless|vmess|ss|trojan|hysteria2|hy2)://[^\s\r\n\'"]+', text_to_search, re.IGNORECASE)
                 for key in found:
                     raw_keys.add(clean_string(key))
@@ -184,7 +203,6 @@ def verify_l7(link, port=10080):
         proxy_handler = urllib.request.ProxyHandler({'http': f'http://127.0.0.1:{port}', 'https': f'http://127.0.0.1:{port}'})
         opener = urllib.request.build_opener(proxy_handler)
         
-        # Настоящий HTTP GET тест ко всем 3 сервисам
         for url in TEST_URLS:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with opener.open(req, timeout=3.5) as resp:
@@ -208,7 +226,6 @@ def rename_link(link, index):
     scheme = link.split("://")[0].upper()
     if scheme == "HY2": scheme = "Hysteria2"
 
-    # Удаляем иероглифы и старый мусор, формируем аккуратное имя
     clean_label = f"{flag} {code} | {scheme}-{index}"
     base_part = link.split("#")[0]
     return f"{base_part}#{urllib.parse.quote(clean_label)}"
@@ -216,11 +233,11 @@ def rename_link(link, index):
 def main():
     print("1. Скачивание баз подписок...")
     candidates = fetch_candidates()
-    print(f"   Загружено кандидатов всех протоколов: {len(candidates)}")
+    print(f"   Загружено кандидатов: {len(candidates)}")
 
     print("2. Быстрый отбор по открытым портам...")
     passed_tcp = []
-    with ThreadPoolExecutor(max_workers=100) as executor:
+    with ThreadPoolExecutor(max_workers=120) as executor:
         for res in executor.map(check_port, candidates):
             if res:
                 passed_tcp.append(res)
@@ -233,7 +250,7 @@ def main():
             renamed = rename_link(link, len(final_working) + 1)
             final_working.append(renamed)
             print(f"   [+] Найден рабочий сервер #{len(final_working)}: {urllib.parse.unquote(renamed.split('#')[-1])}")
-            if len(final_working) >= 20:
+            if len(final_working) >= 50:
                 break
 
     if not final_working:

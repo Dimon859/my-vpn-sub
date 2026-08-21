@@ -9,66 +9,18 @@ import time
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-# Расширенный список источников (60+ агрегаторов и подписок)
+# Только 100% проверенные и стабильные источники (без 404 ошибок)
 SOURCES = [
-    # GitHub Aggregators & Auto-collectors
-    "https://raw.githubusercontent.com/freefq/free/master/v2ray",
-    "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/All_Configs_Sub.txt",
-    "https://raw.githubusercontent.com/Esl3m/vpn/main/v2ray",
+    # 1. mfuu
     "https://raw.githubusercontent.com/mfuu/v2ray/master/v2ray",
-    "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/normal/mix",
+    # 2. Mahdi Bland (4000+ узлов)
     "https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/sub/sub_merge.txt",
-    "https://raw.githubusercontent.com/Loperamido/v2ray-subscribe/main/subscribe/v2ray.txt",
-    "https://raw.githubusercontent.com/mft0/V2ray-Configs/main/All_Configs_Sub.txt",
-    "https://raw.githubusercontent.com/soroushmirzaei/telegram-configs/main/happy",
-    "https://raw.githubusercontent.com/aamilf/v2ray-collector/main/sub/all.txt",
-    "https://raw.githubusercontent.com/vless-collector/vless-sub/main/vless.txt",
-    "https://raw.githubusercontent.com/ts-indexer/sub-collector/main/sub/mix.txt",
-    "https://raw.githubusercontent.com/Awesome-V2Ray/V2Ray-Config/main/sub.txt",
-    "https://raw.githubusercontent.com/peassfull/v2ray-collector/main/sub/sub_merge.txt",
-    "https://raw.githubusercontent.com/mosec-sub/v2ray-sub/main/sub.txt",
-    "https://raw.githubusercontent.com/alien-vpn/free-vpn/main/sub.txt",
-    "https://raw.githubusercontent.com/v2ray-free/free-v2ray-config/main/sub.txt",
-    "https://raw.githubusercontent.com/vpn-collector/free-sub/main/sub.txt",
-    "https://raw.githubusercontent.com/roosterkiev/optimus/main/sub.txt",
-    "https://raw.githubusercontent.com/shafinet/v2ray-configs/main/all.txt",
-    "https://raw.githubusercontent.com/coldbird-sub/v2ray/main/sub.txt",
-    "https://raw.githubusercontent.com/MrMohebi/xray-proxy-grabber/main/sub.txt",
-    "https://raw.githubusercontent.com/v2rayk/v2ray-free/master/v2ray",
-    "https://raw.githubusercontent.com/Pillar-v2ray/V2ray-Configs/main/All_Configs_Sub.txt",
-    "https://raw.githubusercontent.com/x2ray/v2ray-configs/main/sub.txt",
-    "https://raw.githubusercontent.com/Leon4rdo-V2ray/V2ray-Configs/main/All_Configs_Sub.txt",
-    "https://raw.githubusercontent.com/crackas/v2ray-collector/main/sub.txt",
-    "https://raw.githubusercontent.com/V2ray-Central/v2ray-sub/main/sub.txt",
-    "https://raw.githubusercontent.com/BtechVpn/V2ray-Collector/main/sub.txt",
-    "https://raw.githubusercontent.com/erik-sub/v2ray-collector/main/sub.txt",
-    # Telegram-based categories
-    "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/reality/mix",
-    "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/vmess/mix",
-    "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/vless/mix",
-    "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/trojan/mix",
-    "https://raw.githubusercontent.com/yebekhe/TelegramV2rayCollector/main/sub/shadowsocks/mix",
-    # Additional large nodes feeds
-    "https://raw.githubusercontent.com/aungthurha/v2ray-collector/main/sub.txt",
-    "https://raw.githubusercontent.com/K3R3M-K/v2ray-collector/main/sub.txt",
-    "https://raw.githubusercontent.com/mhayas/v2ray-sub/main/sub.txt",
-    "https://raw.githubusercontent.com/darknessv2ray/v2ray-sub/main/sub.txt",
-    "https://raw.githubusercontent.com/Snape-v2ray/V2ray-Configs/main/All_Configs_Sub.txt",
-    "https://raw.githubusercontent.com/404p/v2ray-sub/main/sub.txt",
-    "https://raw.githubusercontent.com/Mo-V2ray/V2ray-Configs/main/sub.txt",
-    "https://raw.githubusercontent.com/Bayan-V2ray/V2ray-Configs/main/sub.txt",
-    "https://raw.githubusercontent.com/vless-nodes/vless/main/sub.txt",
-    "https://raw.githubusercontent.com/free-v2ray/v2ray-node/master/sub.txt",
-    "https://raw.githubusercontent.com/Sora-V2ray/V2ray-Configs/main/sub.txt",
-    "https://raw.githubusercontent.com/OpenV2Ray/V2Ray-Config/main/sub.txt",
-    "https://raw.githubusercontent.com/ShadowSocks-Nodes/ShadowSocks/main/sub.txt",
-    "https://raw.githubusercontent.com/Xray-Nodes/Xray-Configs/main/sub.txt",
-    "https://raw.githubusercontent.com/FreeV2RayNodes/V2Ray/main/sub.txt",
-    "https://raw.githubusercontent.com/V2ray-Free-Nodes/V2Ray/main/sub.txt",
-    "https://raw.githubusercontent.com/v2ray-sub-pool/v2ray/main/sub.txt",
-    "https://raw.githubusercontent.com/VPN-Collector/V2Ray-Collector/main/sub.txt",
-    "https://raw.githubusercontent.com/Fast-V2Ray/V2Ray-Configs/main/sub.txt",
-    "https://raw.githubusercontent.com/Pro-V2Ray/V2Ray-Configs/main/sub.txt"
+    # 3. 0xRadikal (Только верифицированные узлы)
+    "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/verified/configs.txt",
+    # 4. barry-far (7000+ узлов)
+    "https://raw.githubusercontent.com/barry-far/V2ray-Config/main/All_Configs_Sub.txt",
+    # 5. ebrasha (1600+ узлов)
+    "https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/main/V2Ray-Config-By-EbraSha.txt"
 ]
 
 TEST_URLS = [
@@ -85,8 +37,8 @@ COUNTRY_FLAGS = {
 }
 
 IP_CACHE = {}
-MAX_PER_COUNTRY = 3  # Максимум 3 сервера от одной страны для разнообразия
-TARGET_TOTAL_SERVERS = 40  # Всего рабочих серверов в готовой подписке
+MAX_PER_COUNTRY = 3
+TARGET_TOTAL_SERVERS = 30
 
 def get_country_info(host):
     if host in IP_CACHE:
@@ -111,6 +63,7 @@ def clean_string(s):
 def fetch_candidates():
     raw_keys = set()
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    print(f"Всего источников в списке SOURCES: {len(SOURCES)}")
     for url in SOURCES:
         try:
             req = urllib.request.Request(url, headers=headers)
@@ -126,9 +79,11 @@ def fetch_candidates():
                     pass
 
                 found = re.findall(r'(?:vless|vmess|ss|trojan|hysteria2|hy2)://[^\s\r\n\'"]+', text_to_search, re.IGNORECASE)
+                print(f"  [+] Скачано {len(found)} узлов | {url}")
                 for key in found:
                     raw_keys.add(clean_string(key))
-        except Exception:
+        except Exception as e:
+            print(f"  [-] Ошибка при скачивании ({e}) | {url}")
             continue
     return list(raw_keys)
 
@@ -251,11 +206,11 @@ def rename_link(link, index, code, flag):
     return f"{base_part}#{urllib.parse.quote(clean_label)}"
 
 def main():
-    print("1. Скачивание расширенных баз подписок...")
+    print("1. Скачивание проверенных баз подписок...")
     candidates = fetch_candidates()
-    print(f"   Загружено кандидатов: {len(candidates)}")
+    print(f"\n   Итого уникальных кандидатов со всех источников: {len(candidates)}")
 
-    print("2. Быстрый отбор по открытым портам...")
+    print("\n2. Быстрый отбор по открытым портам...")
     passed_tcp = []
     with ThreadPoolExecutor(max_workers=120) as executor:
         for res in executor.map(check_port, candidates):
@@ -263,7 +218,7 @@ def main():
                 passed_tcp.append(res)
     print(f"   Открытые порты у {len(passed_tcp)} узлов.")
 
-    print("3. HTTP GET проверка с распределением по странам...")
+    print("\n3. HTTP GET проверка с разбавлением по странам...")
     final_working = []
     country_counts = {}
 
@@ -287,7 +242,7 @@ def main():
         print("   Рабочих серверов не найдено.")
         return
 
-    print(f"4. Сохранение {len(final_working)} разноплановых серверов...")
+    print(f"\n4. Сохранение {len(final_working)} серверов...")
     with open("clean_sub.txt", "w", encoding="utf-8") as f:
         f.write("\n".join(final_working))
 

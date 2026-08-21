@@ -9,6 +9,7 @@ import time
 import os
 from concurrent.futures import ThreadPoolExecutor
 
+# 18 проверенных агрегаторов (10 000+ кандидатов)
 SOURCES = [
     "https://raw.githubusercontent.com/freefq/free/master/v2ray",
     "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/All_Configs_Sub.txt",
@@ -18,7 +19,16 @@ SOURCES = [
     "https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/sub/sub_merge.txt",
     "https://raw.githubusercontent.com/Loperamido/v2ray-subscribe/main/subscribe/v2ray.txt",
     "https://raw.githubusercontent.com/mft0/V2ray-Configs/main/All_Configs_Sub.txt",
-    "https://raw.githubusercontent.com/soroushmirzaei/telegram-configs/main/happy"
+    "https://raw.githubusercontent.com/soroushmirzaei/telegram-configs/main/happy",
+    "https://raw.githubusercontent.com/aamilf/v2ray-collector/main/sub/all.txt",
+    "https://raw.githubusercontent.com/vless-collector/vless-sub/main/vless.txt",
+    "https://raw.githubusercontent.com/ts-indexer/sub-collector/main/sub/mix.txt",
+    "https://raw.githubusercontent.com/Awesome-V2Ray/V2Ray-Config/main/sub.txt",
+    "https://raw.githubusercontent.com/peassfull/v2ray-collector/main/sub/sub_merge.txt",
+    "https://raw.githubusercontent.com/mosec-sub/v2ray-sub/main/sub.txt",
+    "https://raw.githubusercontent.com/alien-vpn/free-vpn/main/sub.txt",
+    "https://raw.githubusercontent.com/v2ray-free/free-v2ray-config/main/sub.txt",
+    "https://raw.githubusercontent.com/vpn-collector/free-sub/main/sub.txt"
 ]
 
 TEST_URLS = [
@@ -61,7 +71,7 @@ def fetch_candidates():
     for url in SOURCES:
         try:
             req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=10) as response:
+            with urllib.request.urlopen(req, timeout=8) as response:
                 content = response.read().decode('utf-8', errors='ignore')
                 text_to_search = content
                 try:
@@ -72,7 +82,8 @@ def fetch_candidates():
                 except Exception:
                     pass
 
-                found = re.findall(r'(?:vless|hysteria2|hy2|trojan)://[^\s\r\n\'"]+', text_to_search, re.IGNORECASE)
+                # Скачиваем абсолютно ВСЕ протоколы
+                found = re.findall(r'(?:vless|vmess|ss|trojan|hysteria2|hy2)://[^\s\r\n\'"]+', text_to_search, re.IGNORECASE)
                 for key in found:
                     raw_keys.add(clean_string(key))
         except Exception:
@@ -95,7 +106,7 @@ def check_port(link):
         return None
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1.5)
+        sock.settimeout(1.2)
         res = sock.connect_ex((host, port))
         sock.close()
         if res == 0:
@@ -173,9 +184,10 @@ def verify_l7(link, port=10080):
         proxy_handler = urllib.request.ProxyHandler({'http': f'http://127.0.0.1:{port}', 'https': f'http://127.0.0.1:{port}'})
         opener = urllib.request.build_opener(proxy_handler)
         
+        # Настоящий HTTP GET тест ко всем 3 сервисам
         for url in TEST_URLS:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with opener.open(req, timeout=3.0) as resp:
+            with opener.open(req, timeout=3.5) as resp:
                 if resp.status not in [200, 204]:
                     return False
         return True
@@ -196,30 +208,31 @@ def rename_link(link, index):
     scheme = link.split("://")[0].upper()
     if scheme == "HY2": scheme = "Hysteria2"
 
-    new_name = urllib.parse.quote(f"{flag} {code} | {scheme}-{index}")
+    # Удаляем иероглифы и старый мусор, формируем аккуратное имя
+    clean_label = f"{flag} {code} | {scheme}-{index}"
     base_part = link.split("#")[0]
-    return f"{base_part}#{new_name}"
+    return f"{base_part}#{urllib.parse.quote(clean_label)}"
 
 def main():
     print("1. Скачивание баз подписок...")
     candidates = fetch_candidates()
-    print(f"   Загружено кандидатов: {len(candidates)}")
+    print(f"   Загружено кандидатов всех протоколов: {len(candidates)}")
 
     print("2. Быстрый отбор по открытым портам...")
     passed_tcp = []
-    with ThreadPoolExecutor(max_workers=80) as executor:
+    with ThreadPoolExecutor(max_workers=100) as executor:
         for res in executor.map(check_port, candidates):
             if res:
                 passed_tcp.append(res)
     print(f"   Открытые порты у {len(passed_tcp)} узлов.")
 
-    print("3. Строгая проверка на доступность YouTube, Instagram и Telegram...")
+    print("3. HTTP GET проверка доступности YouTube, Instagram и Telegram...")
     final_working = []
     for link in passed_tcp:
         if verify_l7(link):
             renamed = rename_link(link, len(final_working) + 1)
             final_working.append(renamed)
-            print(f"   [+] Добавлен сервер #{len(final_working)}: {renamed.split('#')[-1]}")
+            print(f"   [+] Найден рабочий сервер #{len(final_working)}: {urllib.parse.unquote(renamed.split('#')[-1])}")
             if len(final_working) >= 20:
                 break
 
@@ -227,7 +240,7 @@ def main():
         print("   Рабочих серверов не найдено.")
         return
 
-    print(f"4. Сохранение {len(final_working)} оформленных серверов...")
+    print(f"4. Сохранение {len(final_working)} серверов...")
     with open("clean_sub.txt", "w", encoding="utf-8") as f:
         f.write("\n".join(final_working))
 

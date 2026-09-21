@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.save
+check.log
+check.pid
+test.txt
+nohup.out

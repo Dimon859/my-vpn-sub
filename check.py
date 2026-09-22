@@ -137,7 +137,13 @@ SOURCES = [
     "https://etoneya.su/whitelist",
     "https://gitverse.ru/api/repos/272/wl/raw/branch/master/whitelist",
     "https://gitverse.ru/api/repos/Akres/VPN/raw/branch/master/bwl",
-    "https://raw.githubusercontent.com/gooseteam-hackers/GooseVPN/refs/heads/main/configs/plus.txt"
+    "https://raw.githubusercontent.com/gooseteam-hackers/GooseVPN/refs/heads/main/configs/plus.txt",
+    # === НОВЫЕ ИСТОЧНИКИ ДЛЯ БЕЛЫХ СПИСКОВ ===
+    "https://raw.githubusercontent.com/FLAT447/v2ray-lists/main/WHITE_FULL.txt",
+    "https://raw.githubusercontent.com/FLAT447/v2ray-lists/main/WHITE_LITE.txt",
+    "https://raw.githubusercontent.com/nikita29a/FreeProxyList/main/mirror/1.txt",
+    "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/WHITE-SNI-RU-all.txt",
+    "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt",
 ]
 
 def is_supported(s):
@@ -474,22 +480,49 @@ def get_country(host):
     if host in geo_cache:
         return geo_cache[host]
     
+    ip = None
     try:
         ip = host if re.match(r'^\d+\.\d+\.\d+\.\d+$', host) else socket.gethostbyname(host)
-        r = subprocess.run(['curl', '-s', '--max-time', '5', 
-                          f'http://ip-api.com/json/{ip}?fields=country,countryCode,city'],
-                         capture_output=True, text=True, timeout=8)
-        data = json.loads(r.stdout)
-        if data.get('status') == 'success':
-            country = data.get('country', 'Unknown')
-            city = data.get('city', '')
-            cc = data.get('countryCode', 'XX')
-            flag = chr(ord(cc[0]) + 127397) + chr(ord(cc[1]) + 127397) if len(cc) == 2 else '🌍'
-            info = {'country': country, 'code': cc, 'city': city, 'flag': flag}
-            geo_cache[host] = info
-            return info
     except:
         pass
+    
+    # 1. Локальный geoiplookup
+    if ip:
+        try:
+            r = subprocess.run(['geoiplookup', ip], capture_output=True, text=True, timeout=5)
+            output = r.stdout.strip()
+            if ':' in output and 'IP Address not found' not in output:
+                parts = output.split(':', 1)[1].strip()
+                if ',' in parts:
+                    cc, country = parts.split(',', 1)
+                    cc = cc.strip()
+                    country = country.strip()
+                    if cc and cc != '--':
+                        flag = chr(ord(cc[0]) + 127397) + chr(ord(cc[1]) + 127397) if len(cc) == 2 else '🌍'
+                        info = {'country': country, 'code': cc, 'city': '', 'flag': flag}
+                        geo_cache[host] = info
+                        return info
+        except:
+            pass
+    
+    # 2. ip-api.com (с задержкой)
+    if ip:
+        try:
+            time.sleep(0.3)
+            r = subprocess.run(['curl', '-s', '--max-time', '5',
+                              f'http://ip-api.com/json/{ip}?fields=country,countryCode,city'],
+                             capture_output=True, text=True, timeout=8)
+            data = json.loads(r.stdout)
+            if data.get('status') == 'success':
+                country = data.get('country', 'Unknown')
+                city = data.get('city', '')
+                cc = data.get('countryCode', 'XX')
+                flag = chr(ord(cc[0]) + 127397) + chr(ord(cc[1]) + 127397) if len(cc) == 2 else '🌍'
+                info = {'country': country, 'code': cc, 'city': city, 'flag': flag}
+                geo_cache[host] = info
+                return info
+        except:
+            pass
     
     info = {'country': 'Unknown', 'code': 'XX', 'city': '', 'flag': '🌍'}
     geo_cache[host] = info
@@ -580,9 +613,19 @@ def main():
                 print(f'✅ {len(configs)} - {url[:60]}')
         except:
             pass
+    # Загружаем существующие рабочие серверы из clean_sub.txt
+    existing = []
+    if os.path.exists("clean_sub.txt"):
+        with open("clean_sub.txt", "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if "://" in line:
+                    existing.append(line)
+        print(f"\n✅ Загружено старых рабочих: {len(existing)}")
+        raw.update(existing)
+    
     configs = remove_dups(list(raw))
-    print(f'\n✅ Источников: {working_sources}/{len(SOURCES)}')
-    print(f'✅ Загружено: {len(configs)}')
+    print(f"\n✅ Загружено всего: {len(configs)}")
     
     priority_configs = [c for c in configs if is_priority(c)]
     other_configs = [c for c in configs if not is_priority(c)]

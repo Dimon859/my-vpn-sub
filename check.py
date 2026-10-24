@@ -987,6 +987,80 @@ def main():
     print(f'   🇷🇺 RU: {len(clean_ru)}')
     print(f'   🌍 Остальные: {len(clean_other)}')
 
+    # Финальная TCP-проверка (убираем умершие за время прогона)
+    # HY2 (UDP) — исключаем из TCP-проверки
+    _dead_after = {}
+    _filter_notes = []
+
+    def _net_ok():
+        for h in ('1.1.1.1', '8.8.8.8', '9.9.9.9'):
+            try:
+                ok, _ = test_tcp(h, 443, timeout=3)
+                if ok:
+                    return True
+            except:
+                pass
+        return False
+
+    def _filter_dead(lst, label):
+        if not lst:
+            return lst
+        # 1. Проверка сети перед фильтром
+        if not _net_ok():
+            msg = f'⚠️ Фильтр {label} отменён: сеть недоступна'
+            print(msg)
+            notify(msg, title='MyVPN ⚠️', priority='high')
+            _filter_notes.append(msg)
+            return lst
+        # 2. Фильтр с try/except
+        try:
+            alive = []
+            dead = 0
+            err = 0
+            for cfg in lst:
+                if cfg.startswith('hysteria2://') or cfg.startswith('hy2://'):
+                    alive.append(cfg)
+                    continue
+                try:
+                    host = get_host(cfg)
+                    port = get_port(cfg)
+                    ok = test_tcp(host, port, timeout=3)[0] or test_tcp(host, port, timeout=3)[0]
+                    if ok:
+                        alive.append(cfg)
+                    else:
+                        dead += 1
+                except:
+                    alive.append(cfg)
+                    err += 1
+            if err:
+                emsg = f'⚠️ Фильтр {label}: {err} ошибок проверки (оставлены как живые)'
+                print(emsg)
+                _filter_notes.append(emsg)
+            # 3. Порог: если осталось < 50% — откат
+            if len(alive) < 0.5 * len(lst):
+                msg = f'⚠️ Фильтр {label} отменён: {len(alive)} из {len(lst)} (меньше 50%)'
+                print(msg)
+                notify(msg, title='MyVPN ⚠️', priority='high')
+                _filter_notes.append(msg)
+                return lst
+            print(f'   🔍 {label}: живых {len(alive)}, умерших {dead}')
+            _dead_after[label] = dead
+            return alive
+        except Exception as e:
+            msg = f'⚠️ Фильтр {label} упал: {e}'
+            print(msg)
+            notify(msg, title='MyVPN ⚠️', priority='high')
+            _filter_notes.append(msg)
+            return lst
+
+    clean_other = _filter_dead(clean_other, 'Non-RU')
+    clean_ru = _filter_dead(clean_ru, 'RU')
+    clean = clean_other + clean_ru  # обновляем clean после фильтра
+    _ck = {x.split('#')[0] for x in clean}
+    _h2 = [x for x in home if x.split('#')[0] in _ck]
+    if len(_h2) >= 0.5 * len(home):
+        home = _h2
+
     # Основная подписка (без RU)
     header = f"# {SUBSCRIPTION_NAME}\n# {'=' * 50}\n"
     out_raw = header + '\n'.join(clean_other)
@@ -1400,6 +1474,8 @@ def main():
             f'⚙️ Xray: запущено {xray_launched}, упало {xray_failed}\n'
             f'📊 Проверено: {len(configs)}\n'
             f'🟢 Рабочих: {len(home)}\n'
+            f'💀 Умерло после TCP: {_dead_after.get("Non-RU", 0) + _dead_after.get("RU", 0)}\n'
+            f'{chr(10).join(_filter_notes) + chr(10) if _filter_notes else ""}'
             f'{dead_str}'
             f'📤 Выгружено: {len(clean)} серверов\n'
             f'{unique_ip_str}\n'

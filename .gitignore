@@ -25,3 +25,5 @@ history.jsonl
 .telegram_chat
 check.py
 freeze.py
+check.py.save.*
+*.save.*

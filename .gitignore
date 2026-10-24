@@ -23,3 +23,5 @@ history.jsonl
 .env
 .telegram_token
 .telegram_chat
+check.py
+freeze.py

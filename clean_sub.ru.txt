@@ -1,4 +1,4 @@
 # MyVPN(RU)
 # ==================================================
-vless://e0216964-ffa1-4d39-82c4-0e40879a470d@212.109.194.231:444?encryption=none&flow=xtls-rprx-vision&fp=firefox&pbk=XYkuP_Keu-yL7EQ8xZc4RTmcVAfp06Z1onV2ZNrlsHM&security=reality&sid=c31f187b&sni=lamibeauty.site&type=tcp#%F0%9F%87%B7%F0%9F%87%BA%20RU%20%7C%20Khimki%20%5B22%5D
-vless://b48e1596-e835-4547-bdae-31daadf9ea17@5.53.124.191:8008?encryption=none&type=xhttp&security=none&path=%2F&mode=auto#%F0%9F%87%B7%F0%9F%87%BA%20RU%20%7C%20St%20Petersburg%20%5B25%5D
+vless://0bf8538b-6299-46b0-9775-8b00939dccb5@132.243.230.251:443?path=%2Fentry-xh&security=reality&encryption=none&pbk=Uz1UbBDf84n7oNfFIhFvXbuFcj1nbNEroiKC_Ud4ajg&fp=chrome&type=xhttp&sni=www.kinopoisk.ru&sid=b2f9bb426426e0e7#%F0%9F%87%B7%F0%9F%87%BA%20RU%20%7C%20Moscow%20%5B24%5D
+vless://b2847c3b-5278-4b06-9c66-bc919d2dfec7@186.246.9.29:443?fp=firefox&pbk=MPNMomAMn_lu9YMYjD2jAQWrI-rTM4hj9Jgg9d6qzTA&security=reality&sid=50ad5564&sni=wordpress.com&type=tcp#%F0%9F%87%B7%F0%9F%87%BA%20RU%20%7C%20Moscow%20%5B37%5D

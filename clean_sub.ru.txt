@@ -1,4 +1,4 @@
 # MyVPN(RU)
 # ==================================================
-vless://94b0bb9f-bac1-45df-bdea-de3a510553e9@188.225.32.109:8443?encryption=none&flow=xtls-rprx-vision&fp=firefox&pbk=G9moMffbmvROyIhsLqoRhMWwxzi9Ptp_xni32ojwd3c&security=reality&sid=6bd087ae9b635d05&sni=ee.lamibeauty.site&type=tcp#%F0%9F%87%B7%F0%9F%87%BA%20RU%20%7C%20St%20Petersburg%20%5B7%5D
-vless://fafc7c16-f890-45ee-a856-02df225172dd@c3f630g.es4.h1clayd.click:443?encryption=none&type=grpc&security=reality&fp=firefox&pbk=BzM-6A4DGbjpquuwUmotiamNZlamur11IXX5Xyh_wBg&sni=c3f630g.es4.h1clayd.click&sid=2d2d5faf568b584d&serviceName=7e802b075a7c#%F0%9F%87%B7%F0%9F%87%BA%20RU%20%7C%20Moscow%20%5B21%5D
+vless://fafc7c16-f890-45ee-a856-02df225172dd@c3f630g.es4.h1clayd.click:443?encryption=none&type=grpc&security=reality&fp=firefox&pbk=BzM-6A4DGbjpquuwUmotiamNZlamur11IXX5Xyh_wBg&sni=c3f630g.es4.h1clayd.click&sid=2d2d5faf568b584d&serviceName=7e802b075a7c#%F0%9F%87%B7%F0%9F%87%BA%20RU%20%7C%20Moscow%20%5B3%5D
+vless://94b0bb9f-bac1-45df-bdea-de3a510553e9@188.225.32.109:8443?encryption=none&flow=xtls-rprx-vision&fp=firefox&pbk=G9moMffbmvROyIhsLqoRhMWwxzi9Ptp_xni32ojwd3c&security=reality&sid=6bd087ae9b635d05&sni=ee.lamibeauty.site&type=tcp#%F0%9F%87%B7%F0%9F%87%BA%20RU%20%7C%20St%20Petersburg%20%5B14%5D

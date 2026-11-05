@@ -1,2 +1,3 @@
 # MyVPN(RU)
 # ==================================================
+vless://8fb19a9e-ca2b-433a-8469-e4c7796033b2@31.130.150.89:443?encryption=none&fp=firefox&security=tls&serviceName=glush.de1.v1&sni=falmero.store&type=grpc#%F0%9F%87%B7%F0%9F%87%BA%20RU%20%7C%20Moscow%20%5B1.1%5D

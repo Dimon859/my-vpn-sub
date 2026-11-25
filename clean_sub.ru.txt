@@ -1,8 +1,3 @@
 # MyVPN(RU)
 # ==================================================
 vless://15236609-63a2-494b-aa0a-d7066da474ef@141.98.189.154:443?flow=xtls-rprx-vision&encryption=none&security=reality&sni=pa.zainet.tech&fp=safari&pbk=C7c9W3COhLMvGQ8WzGwqvULK1ua_K17nDzTDWbE-xGE&sid=54a55c80ed16f17b&type=tcp&headerType=none#%F0%9F%87%B7%F0%9F%87%BA%20RU%20%7C%20Moscow%20%5B1.1%5D
-vless://9df9ee1a-0671-4c6c-93c7-65598fb946f7@141.8.198.29:443?encryption=none&flow=xtls-rprx-vision&fp=firefox&pbk=xPwj2JRpRX0EhUmiJeuii1iMaX1iT2Smq0k5Pyu3hEk&security=reality&sid=7ce3580ea68cc329&sni=rusbox634.grizpliz.am&type=tcp#%F0%9F%87%B7%F0%9F%87%BA%20RU%20%7C%20St%20Petersburg%20%5B2.1%5D
-vless://65b6bc06-44c9-000d-8dc0-bdf1d688c0e6@111.88.131.104:443?security=tls&flow=xtls-rprx-vision&fp=firefox&sni=femboyfeedlover.ru#%F0%9F%87%B7%F0%9F%87%BA%20RU%20%7C%20Moscow%20%5B3.1%5D
-vless://0173d52e-8e1b-4681-831e-11529677b72f@165.231.157.154:8443?encryption=none&flow=xtls-rprx-vision&fp=firefox&security=tls&sni=api-6b04608f.adhil.uk&type=tcp#%F0%9F%87%B7%F0%9F%87%BA%20RU%20%7C%20Moscow%20%5B4.1%5D
-vless://9df9ee1a-0671-4c6c-93c7-65598fb946f7@195.209.217.220:443?flow=xtls-rprx-vision&security=reality&sni=ruhsds738.gangtype.com&fp=firefox&pbk=DHNvz0B_jGSTq2uK8Sehqo1u6Vv-fSSvk6-cRQJUKHM&sid=8aaef249c24f2be7&type=raw#%F0%9F%87%B7%F0%9F%87%BA%20RU%20%7C%20Moscow%20%5B5.1%5D
-vless://11d14aed-3d44-4bb2-b9c0-24e661589e5a@rufi01.tunnely.space:443?security=tls&encryption=none&fp=firefox&type=xhttp&sni=fi01.tunnely.space&path=%2Fxhttp%2F&mode=packet-up&alpn=h2%2Chttp%2F1.1&allowInsecure=0#%F0%9F%87%B7%F0%9F%87%BA%20RU%20%7C%20Moscow%20%5B6.1%5D
